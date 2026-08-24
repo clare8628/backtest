@@ -55,13 +55,28 @@ export function getManagementFee(symbol: string): number {
   return entry?.expenseRatio ?? 0;
 }
 
+/**
+ * Ranks a catalog entry against a search query, lower is more relevant.
+ * Ticker prefix matches (e.g. "00" -> 0050.TW) rank above ticker substring
+ * matches, which rank above name matches. Without this, short numeric
+ * queries like "00" would get swamped by unrelated funds whose name happens
+ * to contain a "00" (e.g. "標普500", "那斯達克100"), burying the actual
+ * 00xxx-prefixed Taiwan ETF tickers past the result cap.
+ */
+function matchRank(e: CatalogEntry, q: string): number {
+  const symbol = e.symbol.toLowerCase();
+  if (symbol.startsWith(q)) return 0;
+  if (symbol.includes(q)) return 1;
+  if (e.name.toLowerCase().includes(q) || e.nameEn.toLowerCase().includes(q)) return 2;
+  return -1; // no match
+}
+
 export function searchCatalog(query: string): CatalogEntry[] {
   const q = query.trim().toLowerCase();
   if (!q) return SYMBOL_CATALOG.slice(0, 8);
-  return SYMBOL_CATALOG.filter(
-    (e) =>
-      e.symbol.toLowerCase().includes(q) ||
-      e.name.toLowerCase().includes(q) ||
-      e.nameEn.toLowerCase().includes(q)
-  ).slice(0, 8);
+  return SYMBOL_CATALOG.map((e) => ({ e, rank: matchRank(e, q) }))
+    .filter(({ rank }) => rank >= 0)
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, 8)
+    .map(({ e }) => e);
 }
