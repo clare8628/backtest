@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run lint)",
+      "Bash(npm run build)",
+      "mcp__Claude_Browser__read_page",
+      "mcp__Claude_Browser__read_network_requests",
+      "mcp__Claude_Browser__read_console_messages",
+      "mcp__Claude_Browser__preview_logs",
+      "mcp__Claude_Browser__find"
+    ]
+  }
+}
