@@ -17,8 +17,14 @@ export interface BacktestMetrics {
   maxDrawdown: number; // %
   sharpeRatio: number;
   finalValue: number; // per 10000 invested
-  beta: number | null; // covariance(asset, SPY) / variance(SPY); null if market benchmark data unavailable
+  beta: number | null; // covariance(asset, benchmark) / variance(benchmark); null if benchmark data unavailable
   managementFee: number; // annual fee as % (default 0)
+  /** Which symbol Beta was measured against — SPY for US-listed symbols, 0050.TW
+   *  for Taiwan-listed ones. Optional since older/local test fixtures predate it. */
+  benchmarkSymbol?: string;
+  /** Years of price history this symbol actually contributed within the
+   *  requested range (may fall short of it for a recently-listed fund). */
+  availableYears?: number;
 }
 
 export interface Recommendation {

@@ -36,7 +36,9 @@ export function stdDev(values: number[]): number {
 
 /**
  * Calculate Beta the standard way: covariance(asset daily returns, market daily
- * returns) / variance(market daily returns), using SPY as the market benchmark.
+ * returns) / variance(market daily returns), against whichever market benchmark
+ * the caller passes in (SPY for US-listed symbols, 0050.TW for Taiwan-listed
+ * ones — see route.ts).
  *
  * The two return series are date-aligned first (inner join on date) since the
  * asset and benchmark may have slightly different trading calendars (holidays,
@@ -55,8 +57,12 @@ export function calculateBeta(
     if (m !== undefined) paired.push({ asset: r.value, market: m });
   }
 
-  // Need a reasonable amount of overlap for the estimate to mean anything.
-  if (paired.length < 20) return null;
+  // Guard against a near-empty overlap (e.g. two series that barely share any
+  // trading dates), where covariance/variance would be a near-meaningless
+  // estimate from a handful of points. Real comparisons run over months to
+  // years of daily data (hundreds to thousands of points), so this only ever
+  // bites genuinely degenerate overlaps.
+  if (paired.length < 5) return null;
 
   const assetVals = paired.map((p) => p.asset);
   const marketVals = paired.map((p) => p.market);
@@ -308,4 +314,45 @@ export function normalizeToIndex(prices: PricePoint[], maxPoints = 120): Indexed
     sampled.push({ date: last.date, value: round2((last.close / base) * 100) });
   }
   return sampled;
+}
+
+/** Calendar-year span covered by a price series' own first-to-last date. */
+export function seriesYears(prices: PricePoint[]): number {
+  if (prices.length < 2) return 0;
+  const ms =
+    new Date(prices[prices.length - 1].date).getTime() - new Date(prices[0].date).getTime();
+  return ms / (1000 * 60 * 60 * 24 * 365.25);
+}
+
+/**
+ * The date window shared by every series in a comparison group — the latest of
+ * their start dates through the earliest of their end dates. ETFs list on
+ * different dates (a fund launched 18 months ago has far less history than one
+ * that's been trading for 5 years), so comparing raw totalReturn/annualizedReturn
+ * across a group silently mixes different market eras unless every series is
+ * trimmed to this common window first. Returns null only when the group is
+ * empty (nothing to align).
+ */
+export function commonWindow(
+  seriesList: SymbolSeries[]
+): { start: string; end: string } | null {
+  const withData = seriesList.filter((s) => s.prices.length > 0);
+  if (withData.length === 0) return null;
+  let start = withData[0].prices[0].date;
+  let end = withData[0].prices[withData[0].prices.length - 1].date;
+  for (const s of withData) {
+    const first = s.prices[0].date;
+    const last = s.prices[s.prices.length - 1].date;
+    if (first > start) start = first;
+    if (last < end) end = last;
+  }
+  return start <= end ? { start, end } : null;
+}
+
+/** Keeps only the price points falling within an inclusive [start, end] date window. */
+export function trimToWindow(
+  prices: PricePoint[],
+  window: { start: string; end: string }
+): PricePoint[] {
+  return prices.filter((p) => p.date >= window.start && p.date <= window.end);
 }

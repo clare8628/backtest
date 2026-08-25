@@ -12,6 +12,8 @@ interface BacktestResult {
   recommendations: Recommendation[];
   series: SymbolIndexSeries[];
   errors: { symbol: string; message: string }[];
+  alignedWindow?: { start: string; end: string; years: number } | null;
+  constrainedBy?: string | null;
 }
 
 const DEBOUNCE_MS = 500;
@@ -416,6 +418,16 @@ export default function Home() {
                       </p>
                     )}
 
+                    {result.constrainedBy && result.alignedWindow && (
+                      <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
+                        {T.alignedNoticeBefore}
+                        <strong>{result.constrainedBy}</strong>
+                        {T.alignedNoticeAfter}
+                        {result.alignedWindow.years} {T.years}（{result.alignedWindow.start} ~{" "}
+                        {result.alignedWindow.end}）
+                      </p>
+                    )}
+
                     {result.series && result.series.length > 0 && (
                       <div>
                         <span className="eyebrow">{T.performanceChart}</span>
@@ -436,6 +448,7 @@ export default function Home() {
                               <th className="py-1 pr-4">{T.sharpe}</th>
                               <th className="py-1 pr-4 text-xs">{T.beta}</th>
                               <th className="py-1 pr-4 text-xs">{T.fee}</th>
+                              <th className="py-1 pr-4 text-xs">{T.availableYears}</th>
                               <th className="py-1 pr-4">{T.finalValue}</th>
                             </tr>
                           </thead>
@@ -450,8 +463,25 @@ export default function Home() {
                                   {m.maxDrawdown}%
                                 </td>
                                 <td className="py-1.5 pr-4">{m.sharpeRatio}</td>
-                                <td className="py-1.5 pr-4 text-xs">{m.beta === null ? "N/A" : m.beta}</td>
+                                <td className="py-1.5 pr-4 text-xs">
+                                  {m.beta === null ? (
+                                    "N/A"
+                                  ) : (
+                                    <>
+                                      {m.beta}
+                                      {m.benchmarkSymbol && (
+                                        <span className="opacity-50">
+                                          {" "}
+                                          ({T.betaVs} {m.benchmarkSymbol.replace(".TW", "")})
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
+                                </td>
                                 <td className="py-1.5 pr-4 text-xs">{m.managementFee}%</td>
+                                <td className="py-1.5 pr-4 text-xs">
+                                  {m.availableYears !== undefined ? m.availableYears : "—"}
+                                </td>
                                 <td className="py-1.5 pr-4">{m.finalValue.toLocaleString()}</td>
                               </tr>
                             ))}

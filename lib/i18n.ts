@@ -32,13 +32,17 @@ export const dict = {
     addSymbolToGroup: "搜尋加入標的",
     performanceChart: "績效走勢圖（指數化，起點=100）",
     beta: "Beta係數",
+    betaVs: "對",
     fee: "管理費(%)",
+    availableYears: "可用年數",
     scoreFormula: "評分公式（依組內相對表現正規化為 0–100 分後加權加總）",
     scoreFormulaText:
       "評分 = 年化報酬×25% + 波動度(反向)×15% + 最大回撤(反向)×15% + 夏普比率×25% + Beta(反向)×10% + 管理費(反向)×10%",
     scoreFormulaNote: "「反向」表示數值越低，該項得分越高（波動度、回撤、Beta、管理費皆為風險或成本，越低越好）。",
     year: "年",
     years: "年",
+    alignedNoticeBefore: "各標的上市時間不同，已自動將比較期間對齊到 ",
+    alignedNoticeAfter: " 的最短可用歷史：",
   },
   en: {
     title: "ETF & Stock Backtest Platform",
@@ -71,13 +75,17 @@ export const dict = {
     addSymbolToGroup: "Search to add a symbol",
     performanceChart: "Performance (indexed to 100 at start)",
     beta: "Beta",
+    betaVs: "vs",
     fee: "Fee (%)",
+    availableYears: "Data Span (yrs)",
     scoreFormula: "Scoring Formula (each metric normalized to 0–100 within the group, then weighted)",
     scoreFormulaText:
       "Score = Ann. Return×25% + Volatility(inv)×15% + Max Drawdown(inv)×15% + Sharpe×25% + Beta(inv)×10% + Fee(inv)×10%",
     scoreFormulaNote: "\"(inv)\" means lower is better — volatility, drawdown, beta, and fee are all risks/costs, so lower values score higher.",
     year: "yr",
     years: "yrs",
+    alignedNoticeBefore: "Symbols listed at different times — comparison auto-aligned to ",
+    alignedNoticeAfter: "'s shortest available history: ",
   },
 } as const;
 
