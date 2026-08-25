@@ -51,6 +51,16 @@ function formatYearMonth(dateStr: string, lang: Lang): string {
   return d.toLocaleDateString("en-US", { year: "numeric", month: "short" });
 }
 
+/** What the y-axis currently represents, spelled out so a real price is never
+ *  mistaken for an index value (or vice versa) — e.g. a 2x leveraged ETF's
+ *  actual price and its indexed performance can look like similar numbers. */
+function yAxisLabel(mode: ChartMode, currency: Currency, lang: Lang): string {
+  if (mode === "index") return lang === "zh" ? "指數（起點=100）" : "Index (start = 100)";
+  const currencyName =
+    currency === "USD" ? (lang === "zh" ? "美元" : "USD") : lang === "zh" ? "新台幣" : "TWD";
+  return lang === "zh" ? `股價（${currencyName}）` : `Price (${currencyName})`;
+}
+
 /**
  * Lightweight dependency-free SVG line chart showing each symbol's actual
  * price over time, date-aligned on the x-axis, with a hover tooltip and an
@@ -60,7 +70,7 @@ function formatYearMonth(dateStr: string, lang: Lang): string {
 export default function PerformanceChart({ series, mixedCurrencies, lang, height = 280 }: Props) {
   const T = t(lang);
   const width = 640;
-  const padding = { top: 12, right: 12, bottom: 28, left: 56 };
+  const padding = { top: 24, right: 12, bottom: 28, left: 56 };
   const innerW = width - padding.left - padding.right;
   const innerH = height - padding.top - padding.bottom;
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -218,6 +228,12 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
           onMouseMove={handleMove}
           onMouseLeave={() => setHoverT(null)}
         >
+          {/* persistent y-axis title — always visible, not just on hover, so the
+              unit (real price vs. index) is never ambiguous at a glance */}
+          <text x={padding.left} y={12} fontSize={9.5} fontWeight={600} fill="currentColor" opacity={0.75}>
+            {yAxisLabel(mode, activeCurrency, lang)}
+          </text>
+
           {/* y grid + value labels */}
           {Array.from({ length: gridLines + 1 }).map((_, i) => {
             const v = yMin + ((yMax - yMin) * i) / gridLines;
@@ -286,7 +302,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
                 x={0}
                 y={0}
                 width={tooltipW}
-                height={16 + hoverPoints.length * 14}
+                height={30 + hoverPoints.length * 14}
                 rx={6}
                 fill="var(--washi)"
                 stroke="var(--line)"
@@ -295,9 +311,15 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
               <text x={8} y={14} fontSize={10} fontWeight={600} fill="currentColor">
                 {formatYearMonth(tooltipDate, lang)}
               </text>
+              {/* unit restated here too — the axis title above can scroll out of
+                  view, and this is exactly where a real price vs. an index value
+                  gets misread as the other */}
+              <text x={8} y={25} fontSize={8} fill="currentColor" opacity={0.55}>
+                {yAxisLabel(mode, activeCurrency, lang)}
+              </text>
               {hoverPoints.map((h, idx) =>
                 h.point ? (
-                  <text key={h.symbol} x={8} y={30 + idx * 14} fontSize={9.5} fill={COLORS[idx % COLORS.length]}>
+                  <text key={h.symbol} x={8} y={41 + idx * 14} fontSize={9.5} fill={COLORS[idx % COLORS.length]}>
                     {h.symbol}: {formatValue(h.point.value, mode, activeCurrency)}
                   </text>
                 ) : null
