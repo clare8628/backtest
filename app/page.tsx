@@ -3,14 +3,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t, Lang } from "@/lib/i18n";
 import { searchCatalog } from "@/lib/symbolCatalog";
-import { ComparisonGroup, BacktestMetrics, Recommendation, SymbolIndexSeries } from "@/lib/types";
+import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries } from "@/lib/types";
 import { loadGroups, upsertGroup, deleteGroup, newGroupId } from "@/lib/storage";
 import PerformanceChart from "@/components/PerformanceChart";
 
 interface BacktestResult {
   metrics: BacktestMetrics[];
   recommendations: Recommendation[];
-  series: SymbolIndexSeries[];
+  chartSeries: ChartSeries[];
+  mixedCurrencies: boolean;
   errors: { symbol: string; message: string }[];
   alignedWindow?: { start: string; end: string; years: number } | null;
   constrainedBy?: string | null;
@@ -81,7 +82,13 @@ export default function Home() {
     } catch {
       setResults((prev) => ({
         ...prev,
-        [group.id]: { metrics: [], recommendations: [], series: [], errors: [{ symbol: "*", message: "network error" }] },
+        [group.id]: {
+          metrics: [],
+          recommendations: [],
+          chartSeries: [],
+          mixedCurrencies: false,
+          errors: [{ symbol: "*", message: "network error" }],
+        },
       }));
     } finally {
       setLoadingId(null);
@@ -428,10 +435,14 @@ export default function Home() {
                       </p>
                     )}
 
-                    {result.series && result.series.length > 0 && (
+                    {result.chartSeries && result.chartSeries.length > 0 && (
                       <div>
                         <span className="eyebrow">{T.performanceChart}</span>
-                        <PerformanceChart series={result.series} indexLabel="Index=100" />
+                        <PerformanceChart
+                          series={result.chartSeries}
+                          mixedCurrencies={result.mixedCurrencies}
+                          lang={lang}
+                        />
                       </div>
                     )}
 

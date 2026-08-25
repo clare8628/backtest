@@ -53,3 +53,21 @@ export interface SymbolIndexSeries {
   symbol: string;
   points: IndexedPoint[];
 }
+
+export type Currency = "USD" | "TWD";
+
+export interface ChartPoint {
+  date: string; // YYYY-MM-DD
+  /** Price in USD; null only if this symbol is TWD-native and no USD/TWD
+   *  rate was fetched (single-currency comparison, or the FX fetch failed). */
+  priceUSD: number | null;
+  /** Price in TWD; null only if this symbol is USD-native and no USD/TWD
+   *  rate was fetched (single-currency comparison, or the FX fetch failed). */
+  priceTWD: number | null;
+}
+
+export interface ChartSeries {
+  symbol: string;
+  currency: Currency; // the symbol's native trading currency
+  points: ChartPoint[];
+}

@@ -316,6 +316,44 @@ export function normalizeToIndex(prices: PricePoint[], maxPoints = 120): Indexed
   return sampled;
 }
 
+/** Downsamples a price series for lightweight charting, keeping raw close
+ *  values (unlike normalizeToIndex, which re-bases everything to 100). */
+export function downsamplePrices(prices: PricePoint[], maxPoints = 120): PricePoint[] {
+  if (prices.length === 0) return [];
+  const step = Math.max(1, Math.floor(prices.length / maxPoints));
+  const sampled: PricePoint[] = [];
+  for (let i = 0; i < prices.length; i += step) sampled.push(prices[i]);
+  const last = prices[prices.length - 1];
+  if (sampled[sampled.length - 1].date !== last.date) sampled.push(last);
+  return sampled;
+}
+
+/**
+ * Builds a date -> FX rate lookup from a (possibly sparse) rate series, using
+ * the latest available rate on or before the requested date — forex trades on
+ * a wider calendar than either equity market, so gaps are rare, but a market
+ * holiday specific to one exchange shouldn't leave a price point unconvertible.
+ */
+export function fxLookup(rates: PricePoint[]): (date: string) => number | null {
+  const sorted = [...rates].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return (date: string) => {
+    if (sorted.length === 0) return null;
+    let lo = 0;
+    let hi = sorted.length - 1;
+    let ans = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (sorted[mid].date <= date) {
+        ans = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return ans === -1 ? sorted[0].close : sorted[ans].close;
+  };
+}
+
 /** Calendar-year span covered by a price series' own first-to-last date. */
 export function seriesYears(prices: PricePoint[]): number {
   if (prices.length < 2) return 0;

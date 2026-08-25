@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   computeMetrics,
   recommend,
-  normalizeToIndex,
   dailyReturnsWithDates,
   seriesYears,
   commonWindow,
   trimToWindow,
+  downsamplePrices,
+  fxLookup,
 } from "@/lib/backtest";
 import { fetchMultiple, fetchDailyPrices } from "@/lib/marketData";
+import { Currency, ChartSeries } from "@/lib/types";
 
 // A Taiwan-listed fund's daily correlation to the US market isn't a meaningful
 // "Beta" for it, so each symbol is measured against its own market's benchmark:
@@ -16,6 +18,9 @@ import { fetchMultiple, fetchDailyPrices } from "@/lib/marketData";
 // tickers listed on the TWSE.
 const US_MARKET_BENCHMARK_SYMBOL = "SPY";
 const TW_MARKET_BENCHMARK_SYMBOL = "0050.TW";
+// Yahoo Finance FX ticker for USD/TWD (TWD per 1 USD), used to let the chart
+// show a mixed US+TW comparison in one common currency.
+const USD_TWD_FX_SYMBOL = "TWD=X";
 
 function isTaiwanListed(symbol: string): boolean {
   return symbol.toUpperCase().endsWith(".TW");
@@ -23,6 +28,10 @@ function isTaiwanListed(symbol: string): boolean {
 
 function benchmarkFor(symbol: string): string {
   return isTaiwanListed(symbol) ? TW_MARKET_BENCHMARK_SYMBOL : US_MARKET_BENCHMARK_SYMBOL;
+}
+
+function nativeCurrency(symbol: string): Currency {
+  return isTaiwanListed(symbol) ? "TWD" : "USD";
 }
 
 function round2(n: number): number {
@@ -103,18 +112,41 @@ export async function POST(req: NextRequest) {
     });
     const recommendations = recommend(metrics);
 
-    // Normalized series (indexed to 100 at the first data point) for charting,
-    // built from the same aligned window as the metrics above so the chart's
-    // x-axis and the table's numbers describe the same period.
-    const series = alignedResults.map((s) => ({
-      symbol: s.symbol,
-      points: normalizeToIndex(s.prices),
-    }));
+    // Chart series in actual price (not indexed), built from the same aligned
+    // window as the metrics above so the chart's x-axis and the table's
+    // numbers describe the same period. When the group mixes US and Taiwan
+    // symbols, fetch the USD/TWD rate once so the chart can show either
+    // currency without a data round-trip on toggle.
+    const currenciesPresent = new Set(alignedResults.map((s) => nativeCurrency(s.symbol)));
+    const mixedCurrencies = currenciesPresent.has("USD") && currenciesPresent.has("TWD");
+
+    let rateAt: ((date: string) => number | null) | null = null;
+    if (mixedCurrencies) {
+      try {
+        const fx = await fetchDailyPrices(USD_TWD_FX_SYMBOL, rangeYears);
+        rateAt = fxLookup(fx.prices);
+      } catch {
+        rateAt = null; // FX unavailable — chart falls back to native-currency-only per symbol.
+      }
+    }
+
+    const chartSeries: ChartSeries[] = alignedResults.map((s) => {
+      const currency = nativeCurrency(s.symbol);
+      const sampled = downsamplePrices(s.prices, 120);
+      const points = sampled.map((p) => {
+        const rate = rateAt ? rateAt(p.date) : null; // TWD per 1 USD
+        const priceUSD = currency === "USD" ? p.close : rate !== null ? round2(p.close / rate) : null;
+        const priceTWD = currency === "TWD" ? p.close : rate !== null ? round2(p.close * rate) : null;
+        return { date: p.date, priceUSD, priceTWD };
+      });
+      return { symbol: s.symbol, currency, points };
+    });
 
     return NextResponse.json({
       metrics,
       recommendations,
-      series,
+      chartSeries,
+      mixedCurrencies,
       errors,
       alignedWindow: window
         ? {
