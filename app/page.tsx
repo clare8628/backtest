@@ -459,7 +459,7 @@ export default function Home() {
                               <th className="py-1 pr-4">{T.sharpe}</th>
                               <th className="py-1 pr-4 text-xs">{T.beta}</th>
                               <th className="py-1 pr-4 text-xs">{T.fee}</th>
-                              <th className="py-1 pr-4 text-xs">{T.availableYears}</th>
+                              <th className="py-1 pr-4 text-xs">{T.maxBacktestYears}</th>
                               <th className="py-1 pr-4">{T.finalValue}</th>
                             </tr>
                           </thead>
@@ -491,7 +491,7 @@ export default function Home() {
                                 </td>
                                 <td className="py-1.5 pr-4 text-xs">{m.managementFee}%</td>
                                 <td className="py-1.5 pr-4 text-xs">
-                                  {m.availableYears !== undefined ? m.availableYears : "—"}
+                                  {m.maxBacktestYears !== undefined ? m.maxBacktestYears : "—"}
                                 </td>
                                 <td className="py-1.5 pr-4">{m.finalValue.toLocaleString()}</td>
                               </tr>

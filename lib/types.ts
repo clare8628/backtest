@@ -22,9 +22,10 @@ export interface BacktestMetrics {
   /** Which symbol Beta was measured against — SPY for US-listed symbols, 0050.TW
    *  for Taiwan-listed ones. Optional since older/local test fixtures predate it. */
   benchmarkSymbol?: string;
-  /** Years of price history this symbol actually contributed within the
-   *  requested range (may fall short of it for a recently-listed fund). */
-  availableYears?: number;
+  /** This symbol's true maximum backtestable history in years (from its
+   *  listing date to today), independent of the currently selected range —
+   *  a fund listed 2 years ago tops out at ~2 years regardless of the slider. */
+  maxBacktestYears?: number;
 }
 
 export interface Recommendation {

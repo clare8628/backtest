@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { ChartSeries, Currency } from "@/lib/types";
-import { Lang } from "@/lib/i18n";
+import { Lang, t } from "@/lib/i18n";
 
 // 高對比顏色組合
 const COLORS = [
@@ -23,6 +23,8 @@ interface Props {
   height?: number;
 }
 
+type ChartMode = "price" | "index";
+
 interface PlottedPoint {
   date: string;
   t: number; // timestamp, ms
@@ -38,6 +40,11 @@ function formatPrice(value: number, currency: Currency): string {
   return `${prefix}${value.toLocaleString(undefined, { maximumFractionDigits: value >= 100 ? 0 : 2 })}`;
 }
 
+function formatValue(value: number, mode: ChartMode, currency: Currency): string {
+  if (mode === "index") return value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  return formatPrice(value, currency);
+}
+
 function formatYearMonth(dateStr: string, lang: Lang): string {
   const d = new Date(dateStr);
   if (lang === "zh") return `${d.getFullYear()}年${d.getMonth() + 1}月`;
@@ -51,30 +58,38 @@ function formatYearMonth(dateStr: string, lang: Lang): string {
  * symbols.
  */
 export default function PerformanceChart({ series, mixedCurrencies, lang, height = 280 }: Props) {
+  const T = t(lang);
   const width = 640;
   const padding = { top: 12, right: 12, bottom: 28, left: 56 };
   const innerW = width - padding.left - padding.right;
   const innerH = height - padding.top - padding.bottom;
   const svgRef = useRef<SVGSVGElement | null>(null);
 
+  const [mode, setMode] = useState<ChartMode>("price");
   const [displayCurrency, setDisplayCurrency] = useState<Currency>("USD");
   const activeCurrency: Currency = mixedCurrencies ? displayCurrency : series[0]?.currency ?? "USD";
 
-  const plotted = useMemo(
-    () =>
-      series
-        .map((s) => ({
-          symbol: s.symbol,
-          points: s.points
-            .map((p) => {
-              const value = priceOf(activeCurrency, p);
-              return value === null ? null : { date: p.date, t: new Date(p.date).getTime(), value };
-            })
-            .filter((p): p is PlottedPoint => p !== null),
-        }))
-        .filter((s) => s.points.length > 1),
-    [series, activeCurrency]
-  );
+  const plotted = useMemo(() => {
+    const raw = series
+      .map((s) => ({
+        symbol: s.symbol,
+        points: s.points
+          .map((p) => {
+            const value = priceOf(activeCurrency, p);
+            return value === null ? null : { date: p.date, t: new Date(p.date).getTime(), value };
+          })
+          .filter((p): p is PlottedPoint => p !== null),
+      }))
+      .filter((s) => s.points.length > 1);
+
+    if (mode === "price") return raw;
+    // Index mode: rebase each series to 100 at its own first point, so relative
+    // performance is comparable regardless of each symbol's absolute price scale.
+    return raw.map((s) => {
+      const base = s.points[0].value || 1;
+      return { symbol: s.symbol, points: s.points.map((p) => ({ ...p, value: (p.value / base) * 100 })) };
+    });
+  }, [series, activeCurrency, mode]);
 
   const [hoverT, setHoverT] = useState<number | null>(null);
 
@@ -155,24 +170,42 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
 
   return (
     <div className="flex flex-col gap-2">
-      {mixedCurrencies && (
-        <div className="flex justify-end gap-1 text-xs">
-          {(["USD", "TWD"] as Currency[]).map((c) => (
+      <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
+        <div className="flex gap-1">
+          {(["price", "index"] as ChartMode[]).map((m) => (
             <button
-              key={c}
-              onClick={() => setDisplayCurrency(c)}
+              key={m}
+              onClick={() => setMode(m)}
               className="px-2 py-1 rounded-md"
               style={{
                 border: "1px solid var(--line)",
-                background: activeCurrency === c ? "var(--matsu)" : "transparent",
-                color: activeCurrency === c ? "white" : "inherit",
+                background: mode === m ? "var(--matsu)" : "transparent",
+                color: mode === m ? "white" : "inherit",
               }}
             >
-              {c === "USD" ? (lang === "zh" ? "美元 (USD)" : "USD") : lang === "zh" ? "新台幣 (TWD)" : "TWD"}
+              {m === "price" ? T.chartModePrice : T.chartModeIndex}
             </button>
           ))}
         </div>
-      )}
+        {mixedCurrencies && (
+          <div className="flex gap-1">
+            {(["USD", "TWD"] as Currency[]).map((c) => (
+              <button
+                key={c}
+                onClick={() => setDisplayCurrency(c)}
+                className="px-2 py-1 rounded-md"
+                style={{
+                  border: "1px solid var(--line)",
+                  background: activeCurrency === c ? "var(--matsu)" : "transparent",
+                  color: activeCurrency === c ? "white" : "inherit",
+                }}
+              >
+                {c === "USD" ? T.currencyUSD : T.currencyTWD}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="overflow-x-auto">
         <svg
@@ -185,7 +218,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
           onMouseMove={handleMove}
           onMouseLeave={() => setHoverT(null)}
         >
-          {/* y grid + price labels */}
+          {/* y grid + value labels */}
           {Array.from({ length: gridLines + 1 }).map((_, i) => {
             const v = yMin + ((yMax - yMin) * i) / gridLines;
             const y = yFor(v);
@@ -193,7 +226,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
               <g key={i}>
                 <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="var(--line)" strokeWidth={1} />
                 <text x={4} y={y + 3} fontSize={9} fill="currentColor" opacity={0.6}>
-                  {formatPrice(v, activeCurrency)}
+                  {formatValue(v, mode, activeCurrency)}
                 </text>
               </g>
             );
@@ -211,6 +244,19 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
               </g>
             );
           })}
+
+          {/* index baseline at 100 */}
+          {mode === "index" && yMin <= 100 && yMax >= 100 && (
+            <line
+              x1={padding.left}
+              x2={width - padding.right}
+              y1={yFor(100)}
+              y2={yFor(100)}
+              stroke="currentColor"
+              strokeOpacity={0.3}
+              strokeDasharray="3,3"
+            />
+          )}
 
           {/* series lines */}
           {plotted.map((s, idx) => {
@@ -252,7 +298,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
               {hoverPoints.map((h, idx) =>
                 h.point ? (
                   <text key={h.symbol} x={8} y={30 + idx * 14} fontSize={9.5} fill={COLORS[idx % COLORS.length]}>
-                    {h.symbol}: {formatPrice(h.point.value, activeCurrency)}
+                    {h.symbol}: {formatValue(h.point.value, mode, activeCurrency)}
                   </text>
                 ) : null
               )}
@@ -267,7 +313,9 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
               {s.symbol}
             </span>
           ))}
-          <span className="opacity-50">({activeCurrency})</span>
+          <span className="opacity-50">
+            {mode === "price" ? `(${activeCurrency})` : lang === "zh" ? "(指數＝100)" : "(Index=100)"}
+          </span>
         </div>
       </div>
     </div>
