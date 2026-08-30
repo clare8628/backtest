@@ -23,6 +23,34 @@ interface Props {
   height?: number;
 }
 
+interface CrisisEvent {
+  date: string; // representative anchor date (ISO), used to place the marker
+  zh: string;
+  en: string;
+}
+
+/**
+ * Major market crises, anchored to a single representative date each (the
+ * widely-cited crash/collapse date, not the full multi-month drawdown).
+ * Only ones falling inside a chart's actual visible date range are drawn —
+ * pre-1993 entries (no ETF existed yet) simply never render for this app's
+ * data, which is harmless to keep here.
+ */
+const CRISES: CrisisEvent[] = [
+  { date: "1929-10-29", zh: "1929年華爾街股災（經濟大蕭條）", en: "1929 Wall Street Crash (Great Depression)" },
+  { date: "1987-10-19", zh: "1987年黑色星期一", en: "1987 Black Monday" },
+  { date: "1997-07-02", zh: "1997年亞洲金融風暴", en: "1997 Asian Financial Crisis" },
+  { date: "1998-08-17", zh: "1998年俄羅斯債務危機／LTCM危機", en: "1998 Russian Crisis / LTCM Collapse" },
+  { date: "2000-03-10", zh: "2000年網路泡沫破裂", en: "2000 Dot-com Bubble Burst" },
+  { date: "2001-09-11", zh: "2001年911事件市場衝擊", en: "2001 9/11 Market Shock" },
+  { date: "2008-09-15", zh: "2008年全球金融海嘯（雷曼兄弟倒閉）", en: "2008 Global Financial Crisis (Lehman Collapse)" },
+  { date: "2011-08-05", zh: "2011年美債降評危機", en: "2011 US Credit Downgrade Crisis" },
+  { date: "2015-08-24", zh: "2015年中國股災／全球黑色星期一", en: "2015 China Crash / Global Black Monday" },
+  { date: "2018-12-24", zh: "2018年第四季股災（升息疑慮）", en: "2018 Q4 Selloff (Rate Hike Fears)" },
+  { date: "2020-02-20", zh: "2020年新冠疫情股災", en: "2020 COVID-19 Crash" },
+  { date: "2022-01-03", zh: "2022年熊市（升息與通膨）", en: "2022 Bear Market (Rate Hikes & Inflation)" },
+];
+
 type ChartMode = "price" | "index";
 type ChartScale = "linear" | "log";
 
@@ -104,6 +132,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
   }, [series, activeCurrency, mode]);
 
   const [hoverT, setHoverT] = useState<number | null>(null);
+  const [hoveredCrisis, setHoveredCrisis] = useState<string | null>(null);
 
   if (plotted.length === 0) return null;
 
@@ -161,6 +190,16 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
   }
 
   const gridLines = 4;
+
+  // Crisis markers falling inside the chart's actual visible date span.
+  const visibleCrises = CRISES.map((c) => ({ ...c, t: new Date(c.date).getTime() })).filter(
+    (c) => c.t >= tMin && c.t <= tMax
+  );
+
+  // Rough CJK/ASCII-safe label width so the crisis tooltip box fits its text.
+  function labelWidth(text: string): number {
+    return Math.max(60, text.length * 8 + 16);
+  }
 
   // Nearest point per series to the hovered date, for the tooltip.
   function nearestPoint(points: PlottedPoint[], t: number): PlottedPoint | null {
@@ -322,6 +361,64 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
               .map((p, i) => `${i === 0 ? "M" : "L"} ${xFor(p.t).toFixed(1)} ${yFor(p.value).toFixed(1)}`)
               .join(" ");
             return <path key={s.symbol} d={d} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />;
+          })}
+
+          {/* crisis markers — fixed (always visible) red dots on each series at
+              well-known market crashes, with the event name on hover */}
+          {visibleCrises.map((c) => {
+            const x = xFor(c.t);
+            const label = lang === "zh" ? c.zh : c.en;
+            const w = labelWidth(label);
+            const boxX = Math.min(Math.max(x - w / 2, padding.left), width - padding.right - w);
+            return (
+              <g key={c.date}>
+                <line
+                  x1={x}
+                  x2={x}
+                  y1={padding.top}
+                  y2={height - padding.bottom}
+                  stroke="#B71C1C"
+                  strokeOpacity={0.3}
+                  strokeWidth={1}
+                  strokeDasharray="2,2"
+                />
+                {plotted.map((s) => {
+                  const p = nearestPoint(s.points, c.t);
+                  if (!p) return null;
+                  return (
+                    <circle
+                      key={s.symbol}
+                      cx={xFor(p.t)}
+                      cy={yFor(p.value)}
+                      r={3.5}
+                      fill="#B71C1C"
+                      stroke="var(--washi)"
+                      strokeWidth={1.2}
+                    />
+                  );
+                })}
+                {/* wide, mostly-invisible hit area so the thin dashed line/small
+                    dots are easy to hover across the chart's full height */}
+                <rect
+                  x={x - 8}
+                  y={padding.top}
+                  width={16}
+                  height={innerH}
+                  fill="transparent"
+                  onMouseEnter={() => setHoveredCrisis(c.date)}
+                  onMouseLeave={() => setHoveredCrisis((cur) => (cur === c.date ? null : cur))}
+                  style={{ cursor: "pointer" }}
+                />
+                {hoveredCrisis === c.date && (
+                  <g transform={`translate(${boxX}, ${padding.top + 2})`}>
+                    <rect x={0} y={0} width={w} height={18} rx={4} fill="var(--washi)" stroke="#B71C1C" style={{ opacity: 0.97 }} />
+                    <text x={8} y={13} fontSize={9} fontWeight={600} fill="#B71C1C">
+                      {label}
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
           })}
 
           {/* hover guideline + dots */}
