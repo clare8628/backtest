@@ -24,6 +24,7 @@ interface Props {
 }
 
 type ChartMode = "price" | "index";
+type ChartScale = "linear" | "log";
 
 interface PlottedPoint {
   date: string;
@@ -76,6 +77,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   const [mode, setMode] = useState<ChartMode>("price");
+  const [scale, setScale] = useState<ChartScale>("linear");
   const [displayCurrency, setDisplayCurrency] = useState<Currency>("USD");
   const activeCurrency: Currency = mixedCurrencies ? displayCurrency : series[0]?.currency ?? "USD";
 
@@ -111,15 +113,33 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
   const tMax = Math.max(...allT);
   const minV = Math.min(...allV);
   const maxV = Math.max(...allV);
-  const vPad = (maxV - minV) * 0.08 || maxV * 0.1 || 1;
-  const yMin = Math.max(0, minV - vPad);
-  const yMax = maxV + vPad;
+
+  let yMin: number;
+  let yMax: number;
+  if (scale === "log") {
+    // Log scale can't reach 0, so floor the domain just above the smallest
+    // plotted value instead of padding down toward zero like linear mode does.
+    const logMin = Math.log10(Math.max(minV, 1e-6));
+    const logMax = Math.log10(Math.max(maxV, minV * 1.0001, 1e-6));
+    const logPad = (logMax - logMin) * 0.08 || 0.05;
+    yMin = Math.pow(10, logMin - logPad);
+    yMax = Math.pow(10, logMax + logPad);
+  } else {
+    const vPad = (maxV - minV) * 0.08 || maxV * 0.1 || 1;
+    yMin = Math.max(0, minV - vPad);
+    yMax = maxV + vPad;
+  }
 
   function xFor(t: number) {
     const ratio = tMax > tMin ? (t - tMin) / (tMax - tMin) : 0;
     return padding.left + ratio * innerW;
   }
   function yFor(v: number) {
+    if (scale === "log") {
+      const ratio =
+        (Math.log10(Math.max(v, 1e-9)) - Math.log10(yMin)) / (Math.log10(yMax) - Math.log10(yMin) || 1);
+      return padding.top + innerH - ratio * innerH;
+    }
     const ratio = (v - yMin) / (yMax - yMin || 1);
     return padding.top + innerH - ratio * innerH;
   }
@@ -197,6 +217,22 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
             </button>
           ))}
         </div>
+        <div className="flex gap-1">
+          {(["linear", "log"] as ChartScale[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => setScale(s)}
+              className="px-2 py-1 rounded-md"
+              style={{
+                border: "1px solid var(--line)",
+                background: scale === s ? "var(--matsu)" : "transparent",
+                color: scale === s ? "white" : "inherit",
+              }}
+            >
+              {s === "linear" ? T.scaleLinear : T.scaleLog}
+            </button>
+          ))}
+        </div>
         {mixedCurrencies && (
           <div className="flex gap-1">
             {(["USD", "TWD"] as Currency[]).map((c) => (
@@ -236,7 +272,12 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
 
           {/* y grid + value labels */}
           {Array.from({ length: gridLines + 1 }).map((_, i) => {
-            const v = yMin + ((yMax - yMin) * i) / gridLines;
+            // Log-spaced grid values land at evenly spaced pixel rows under yFor's
+            // log transform, the same way linear-spaced values do under linear.
+            const v =
+              scale === "log"
+                ? yMin * Math.pow(yMax / yMin, i / gridLines)
+                : yMin + ((yMax - yMin) * i) / gridLines;
             const y = yFor(v);
             return (
               <g key={i}>
