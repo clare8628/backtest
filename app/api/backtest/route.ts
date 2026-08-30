@@ -8,6 +8,7 @@ import {
   trimToWindow,
   downsamplePrices,
   fxLookup,
+  countSwings,
 } from "@/lib/backtest";
 import { fetchMultiple, fetchDailyPrices } from "@/lib/marketData";
 import { Currency, ChartSeries } from "@/lib/types";
@@ -59,6 +60,10 @@ export async function POST(req: NextRequest) {
     const rangeYears: number = typeof body?.rangeYears === "number" ? body.rangeYears : 5;
     const startValue: number =
       typeof body?.startValue === "number" && body.startValue > 0 ? body.startValue : 1000;
+    const swingThresholdPct: number =
+      typeof body?.swingThresholdPct === "number" && body.swingThresholdPct > 0
+        ? body.swingThresholdPct
+        : 10;
 
     if (symbols.length === 0) {
       return NextResponse.json({ error: "symbols is required" }, { status: 400 });
@@ -130,10 +135,13 @@ export async function POST(req: NextRequest) {
     const metrics = alignedResults.map((s) => {
       const benchmarkSymbol = benchmarkFor(s.symbol);
       const m = computeMetrics(s, startValue, benchmarkReturns.get(benchmarkSymbol) ?? []);
+      const swings = countSwings(s.prices, swingThresholdPct);
       return {
         ...m,
         benchmarkSymbol,
         maxBacktestYears: round2(maxBacktestYears[s.symbol] ?? 0),
+        swingUpCount: swings.up,
+        swingDownCount: swings.down,
       };
     });
     const recommendations = recommend(metrics);

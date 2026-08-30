@@ -50,6 +50,9 @@ export const dict = {
     alignedNoticeBefore: "各標的上市時間不同，已自動將比較期間對齊到 ",
     alignedNoticeAfter: " 的最短可用歷史：",
     alignedFullBefore: "所有標的在此期間內皆有完整資料，比較期間：",
+    swingThreshold: "波段反轉門檻(%)",
+    swingUpCount: "上漲波段次數",
+    swingDownCount: "下跌波段次數",
   },
   en: {
     title: "ETF & Stock Backtest Platform",
@@ -100,6 +103,9 @@ export const dict = {
     alignedNoticeBefore: "Symbols listed at different times — comparison auto-aligned to ",
     alignedNoticeAfter: "'s shortest available history: ",
     alignedFullBefore: "All symbols have complete data for this period — comparing ",
+    swingThreshold: "Swing Threshold (%)",
+    swingUpCount: "Up Swings",
+    swingDownCount: "Down Swings",
   },
 } as const;
 

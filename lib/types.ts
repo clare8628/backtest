@@ -26,6 +26,11 @@ export interface BacktestMetrics {
    *  listing date to today), independent of the currently selected range —
    *  a fund listed 2 years ago tops out at ~2 years regardless of the slider. */
   maxBacktestYears?: number;
+  /** Number of completed up/down price swings of at least swingThresholdPct
+   *  within the backtest window (zigzag-style reversal count) — how many
+   *  times the symbol swung a meaningful amount in each direction. */
+  swingUpCount?: number;
+  swingDownCount?: number;
 }
 
 export interface Recommendation {
@@ -43,6 +48,7 @@ export interface ComparisonGroup {
   createdAt: string;
   rangeYears: number;
   startValue?: number; // 起點金額，預設 1000
+  swingThresholdPct?: number; // 波段反轉門檻(%)，預設 10
 }
 
 export interface IndexedPoint {

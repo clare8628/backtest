@@ -29,6 +29,7 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [rangeYears, setRangeYears] = useState(5);
   const [startValue, setStartValue] = useState(1000);
+  const [swingThresholdPct, setSwingThresholdPct] = useState(10);
 
   const [results, setResults] = useState<Record<string, BacktestResult>>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -75,6 +76,7 @@ export default function Home() {
           symbols: group.symbols,
           rangeYears: group.rangeYears,
           startValue: group.startValue ?? 1000,
+          swingThresholdPct: group.swingThresholdPct ?? 10,
         }),
       });
       const data = await res.json();
@@ -109,12 +111,14 @@ export default function Home() {
       createdAt: new Date().toISOString(),
       rangeYears,
       startValue,
+      swingThresholdPct,
     };
     upsertGroup(group).then((updated) => {
       setGroups(updated);
       setDraftTitle("");
       setDraftSymbols([]);
       setStartValue(1000);
+      setSwingThresholdPct(10);
       runBacktest(group);
     });
   }
@@ -172,6 +176,11 @@ export default function Home() {
     updateGroup(updated, { rerun: true, debounce: true });
   }
 
+  function changeGroupSwingThreshold(group: ComparisonGroup, pct: number) {
+    const updated = { ...group, swingThresholdPct: Math.max(0.1, pct) };
+    updateGroup(updated, { rerun: true, debounce: true });
+  }
+
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
       <header>
@@ -204,12 +213,12 @@ export default function Home() {
           <span className="eyebrow">1. {T.newComparison}</span>
           <h2 className="font-display text-2xl">{T.newComparison}</h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <input
               value={draftTitle}
               onChange={(e) => setDraftTitle(e.target.value)}
               placeholder={T.groupTitlePlaceholder}
-              className="border rounded-lg px-3 py-2 bg-white/70"
+              className="border rounded-lg px-3 py-2 bg-white/70 sm:col-span-1"
               style={{ borderColor: "var(--line)" }}
             />
             <div>
@@ -220,6 +229,18 @@ export default function Home() {
                 onChange={(e) => setStartValue(Math.max(1, Number(e.target.value)))}
                 min="1"
                 step="100"
+                className="w-full border rounded-lg px-3 py-2 bg-white/70"
+                style={{ borderColor: "var(--line)" }}
+              />
+            </div>
+            <div>
+              <label className="text-xs opacity-70 block mb-1">{T.swingThreshold}</label>
+              <input
+                type="number"
+                value={swingThresholdPct}
+                onChange={(e) => setSwingThresholdPct(Math.max(0.1, Number(e.target.value)))}
+                min="0.1"
+                step="1"
                 className="w-full border rounded-lg px-3 py-2 bg-white/70"
                 style={{ borderColor: "var(--line)" }}
               />
@@ -396,7 +417,7 @@ export default function Home() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
                   <RangeSlider
                     label={T.rangeYears}
                     value={g.rangeYears}
@@ -411,6 +432,18 @@ export default function Home() {
                       onChange={(e) => changeGroupStartValue(g, Number(e.target.value))}
                       min="1"
                       step="100"
+                      className="w-full border rounded-lg px-3 py-2 bg-white/70 text-sm"
+                      style={{ borderColor: "var(--line)" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs opacity-70 block mb-1">{T.swingThreshold}</label>
+                    <input
+                      type="number"
+                      value={g.swingThresholdPct ?? 10}
+                      onChange={(e) => changeGroupSwingThreshold(g, Number(e.target.value))}
+                      min="0.1"
+                      step="1"
                       className="w-full border rounded-lg px-3 py-2 bg-white/70 text-sm"
                       style={{ borderColor: "var(--line)" }}
                     />
@@ -466,6 +499,8 @@ export default function Home() {
                               <th className="py-1 pr-4 text-xs">{T.beta}</th>
                               <th className="py-1 pr-4 text-xs">{T.fee}</th>
                               <th className="py-1 pr-4 text-xs">{T.maxBacktestYears}</th>
+                              <th className="py-1 pr-4 text-xs">{T.swingUpCount}</th>
+                              <th className="py-1 pr-4 text-xs">{T.swingDownCount}</th>
                               <th className="py-1 pr-4">{T.finalValue}</th>
                             </tr>
                           </thead>
@@ -498,6 +533,12 @@ export default function Home() {
                                 <td className="py-1.5 pr-4 text-xs">{m.managementFee}%</td>
                                 <td className="py-1.5 pr-4 text-xs">
                                   {m.maxBacktestYears !== undefined ? m.maxBacktestYears : "—"}
+                                </td>
+                                <td className="py-1.5 pr-4 text-xs">
+                                  {m.swingUpCount !== undefined ? m.swingUpCount : "—"}
+                                </td>
+                                <td className="py-1.5 pr-4 text-xs">
+                                  {m.swingDownCount !== undefined ? m.swingDownCount : "—"}
                                 </td>
                                 <td className="py-1.5 pr-4">{m.finalValue.toLocaleString()}</td>
                               </tr>

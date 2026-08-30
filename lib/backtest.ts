@@ -394,3 +394,57 @@ export function trimToWindow(
 ): PricePoint[] {
   return prices.filter((p) => p.date >= window.start && p.date <= window.end);
 }
+
+/**
+ * Counts completed up/down price swings of at least `thresholdPct` using a
+ * zigzag-style reversal rule: track the running extreme in the current
+ * direction, and only register a completed swing (incrementing the count for
+ * the leg that just ended) once price reverses by at least the threshold from
+ * that extreme. This ignores day-to-day noise below the threshold and only
+ * counts a leg once it's actually reversed — an ongoing move at the end of
+ * the window that hasn't yet reversed is not counted.
+ */
+export function countSwings(
+  prices: PricePoint[],
+  thresholdPct: number
+): { up: number; down: number } {
+  if (prices.length < 2 || thresholdPct <= 0) return { up: 0, down: 0 };
+  const threshold = thresholdPct / 100;
+  let up = 0;
+  let down = 0;
+  let direction: 1 | -1 | 0 = 0; // 0 = initial direction not yet confirmed
+  let extreme = prices[0].close;
+
+  for (let i = 1; i < prices.length; i++) {
+    const price = prices[i].close;
+    if (direction === 0) {
+      if (price >= extreme * (1 + threshold)) {
+        direction = 1;
+        extreme = price;
+      } else if (price <= extreme * (1 - threshold)) {
+        direction = -1;
+        extreme = price;
+      }
+      continue;
+    }
+    if (direction === 1) {
+      if (price > extreme) {
+        extreme = price;
+      } else if (price <= extreme * (1 - threshold)) {
+        up++;
+        direction = -1;
+        extreme = price;
+      }
+    } else {
+      if (price < extreme) {
+        extreme = price;
+      } else if (price >= extreme * (1 + threshold)) {
+        down++;
+        direction = 1;
+        extreme = price;
+      }
+    }
+  }
+
+  return { up, down };
+}

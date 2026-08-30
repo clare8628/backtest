@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta } from "@/lib/backtest";
+import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, countSwings } from "@/lib/backtest";
 import { parseStooqCsv, toStooqSymbol } from "@/lib/marketData";
 import { PricePoint, BacktestMetrics } from "@/lib/types";
 
@@ -278,5 +278,37 @@ describe("normalizeToIndex", () => {
     const longSeries = series(Array.from({ length: 500 }, (_, i) => 100 + i));
     const points = normalizeToIndex(longSeries, 50);
     expect(points[points.length - 1].date).toBe(longSeries[longSeries.length - 1].date);
+  });
+});
+
+describe("countSwings", () => {
+  it("counts one completed up-swing once price reverses down past the threshold", () => {
+    const { up, down } = countSwings(series([100, 105, 110, 120, 130, 100, 90]), 10);
+    expect(up).toBe(1);
+    expect(down).toBe(0);
+  });
+
+  it("counts one completed down-swing once price reverses up past the threshold", () => {
+    const { up, down } = countSwings(series([100, 90, 80, 70, 85, 100, 115]), 10);
+    expect(down).toBe(1);
+    expect(up).toBe(0);
+  });
+
+  it("does not count an in-progress leg that hasn't reversed by the threshold yet", () => {
+    // Ends mid-uptrend from the down-swing's extreme (115 is only +64% off the
+    // 70 low but never reverses back down), so that leg stays uncounted.
+    const { up, down } = countSwings(series([100, 90, 80, 70, 85, 100, 115]), 10);
+    expect(up + down).toBe(1);
+  });
+
+  it("ignores moves smaller than the threshold as noise", () => {
+    const { up, down } = countSwings(series([100, 105, 102, 108, 103, 109]), 10);
+    expect(up).toBe(0);
+    expect(down).toBe(0);
+  });
+
+  it("returns zero swings for a non-positive threshold or too few points", () => {
+    expect(countSwings(series([100, 200]), 0)).toEqual({ up: 0, down: 0 });
+    expect(countSwings(series([100]), 10)).toEqual({ up: 0, down: 0 });
   });
 });
