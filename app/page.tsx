@@ -221,30 +221,14 @@ export default function Home() {
               className="border rounded-lg px-3 py-2 bg-white/70 sm:col-span-1"
               style={{ borderColor: "var(--line)" }}
             />
-            <div>
-              <label className="text-xs opacity-70 block mb-1">{T.startValue}</label>
-              <input
-                type="number"
-                value={startValue}
-                onChange={(e) => setStartValue(Math.max(1, Number(e.target.value)))}
-                min="1"
-                step="100"
-                className="w-full border rounded-lg px-3 py-2 bg-white/70"
-                style={{ borderColor: "var(--line)" }}
-              />
-            </div>
-            <div>
-              <label className="text-xs opacity-70 block mb-1">{T.swingThreshold}</label>
-              <input
-                type="number"
-                value={swingThresholdPct}
-                onChange={(e) => setSwingThresholdPct(Math.max(0.1, Number(e.target.value)))}
-                min="0.1"
-                step="1"
-                className="w-full border rounded-lg px-3 py-2 bg-white/70"
-                style={{ borderColor: "var(--line)" }}
-              />
-            </div>
+            <NumberField label={T.startValue} value={startValue} onCommit={setStartValue} min={1} step={100} />
+            <NumberField
+              label={T.swingThreshold}
+              value={swingThresholdPct}
+              onCommit={setSwingThresholdPct}
+              min={0.1}
+              step={1}
+            />
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2">
@@ -424,30 +408,22 @@ export default function Home() {
                     onChange={(years) => changeGroupRange(g, years)}
                     unit={g.rangeYears === 1 ? T.year : T.years}
                   />
-                  <div>
-                    <label className="text-xs opacity-70 block mb-1">{T.startValue}</label>
-                    <input
-                      type="number"
-                      value={g.startValue ?? 1000}
-                      onChange={(e) => changeGroupStartValue(g, Number(e.target.value))}
-                      min="1"
-                      step="100"
-                      className="w-full border rounded-lg px-3 py-2 bg-white/70 text-sm"
-                      style={{ borderColor: "var(--line)" }}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs opacity-70 block mb-1">{T.swingThreshold}</label>
-                    <input
-                      type="number"
-                      value={g.swingThresholdPct ?? 10}
-                      onChange={(e) => changeGroupSwingThreshold(g, Number(e.target.value))}
-                      min="0.1"
-                      step="1"
-                      className="w-full border rounded-lg px-3 py-2 bg-white/70 text-sm"
-                      style={{ borderColor: "var(--line)" }}
-                    />
-                  </div>
+                  <NumberField
+                    label={T.startValue}
+                    value={g.startValue ?? 1000}
+                    onCommit={(v) => changeGroupStartValue(g, v)}
+                    min={1}
+                    step={100}
+                    className="w-full border rounded-lg px-3 py-2 bg-white/70 text-sm"
+                  />
+                  <NumberField
+                    label={T.swingThreshold}
+                    value={g.swingThresholdPct ?? 10}
+                    onCommit={(v) => changeGroupSwingThreshold(g, v)}
+                    min={0.1}
+                    step={1}
+                    className="w-full border rounded-lg px-3 py-2 bg-white/70 text-sm"
+                  />
                 </div>
 
                 {result && (
@@ -598,6 +574,73 @@ export default function Home() {
           })}
         </section>
       </main>
+    </div>
+  );
+}
+
+/**
+ * Number input that lets you freely clear/retype while editing, instead of a
+ * plain controlled `<input type="number">` whose value snaps back to a
+ * clamped default (e.g. min) on every keystroke — including the empty string
+ * mid-edit — fighting whatever you're trying to type. Local text state holds
+ * the in-progress characters verbatim; parsing/clamping/commit only happens
+ * on blur (or Enter).
+ */
+function NumberField({
+  label,
+  value,
+  onCommit,
+  min,
+  step = 1,
+  className = "w-full border rounded-lg px-3 py-2 bg-white/70",
+}: {
+  label: string;
+  value: number;
+  onCommit: (v: number) => void;
+  min: number;
+  step?: number;
+  className?: string;
+}) {
+  const [text, setText] = useState(String(value));
+  const focused = useRef(false);
+
+  useEffect(() => {
+    if (!focused.current) setText(String(value));
+  }, [value]);
+
+  function commit() {
+    const n = Number(text);
+    if (text.trim() === "" || Number.isNaN(n)) {
+      setText(String(value));
+      return;
+    }
+    const clamped = Math.max(min, n);
+    setText(String(clamped));
+    onCommit(clamped);
+  }
+
+  return (
+    <div>
+      <label className="text-xs opacity-70 block mb-1">{label}</label>
+      <input
+        type="number"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onFocus={() => {
+          focused.current = true;
+        }}
+        onBlur={() => {
+          focused.current = false;
+          commit();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        min={min}
+        step={step}
+        className={className}
+        style={{ borderColor: "var(--line)" }}
+      />
     </div>
   );
 }
