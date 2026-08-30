@@ -3,6 +3,7 @@
     "allow": [
       "Bash(npm run lint)",
       "Bash(npm run build)",
+      "Bash(git *)",
       "mcp__Claude_Browser__read_page",
       "mcp__Claude_Browser__read_network_requests",
       "mcp__Claude_Browser__read_console_messages",
