@@ -425,11 +425,17 @@ export default function Home() {
                       </p>
                     )}
 
-                    {result.constrainedBy && result.alignedWindow && (
+                    {result.alignedWindow && (
                       <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
-                        {T.alignedNoticeBefore}
-                        <strong>{result.constrainedBy}</strong>
-                        {T.alignedNoticeAfter}
+                        {result.constrainedBy ? (
+                          <>
+                            {T.alignedNoticeBefore}
+                            <strong>{result.constrainedBy}</strong>
+                            {T.alignedNoticeAfter}
+                          </>
+                        ) : (
+                          T.alignedFullBefore
+                        )}
                         {result.alignedWindow.years} {T.years}（{result.alignedWindow.start} ~{" "}
                         {result.alignedWindow.end}）
                       </p>
