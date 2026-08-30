@@ -232,10 +232,45 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
     setHoverT(tForX(xPixel));
   }
 
-  // Tooltip box: flip to the left of the cursor if it would overflow the right edge.
+  // While a crisis marker is hovered, its label and the price tooltip must
+  // never overlap — both default to roughly the same x (the cursor sits
+  // right on the marker). Default to crisis-left/price-right of the marker's
+  // line; if the marker sits too close to either chart edge for that split to
+  // fit, stack both boxes on whichever side does have room instead.
   const tooltipW = 150;
+  const activeCrisis = hoveredCrisis ? visibleCrises.find((c) => c.date === hoveredCrisis) ?? null : null;
+  const activeCrisisX = activeCrisis ? xFor(activeCrisis.t) : null;
+  const activeCrisisLabelW = activeCrisis ? labelWidth(lang === "zh" ? activeCrisis.zh : activeCrisis.en) : 0;
+
+  let splitCrisisBoxX = 0;
+  let splitPriceBoxX = 0;
+  if (activeCrisisX !== null) {
+    splitCrisisBoxX = activeCrisisX - 10 - activeCrisisLabelW;
+    splitPriceBoxX = activeCrisisX + 10;
+    if (splitCrisisBoxX < padding.left) {
+      // No room to the left — stack both to the right, crisis closer to the line.
+      splitCrisisBoxX = activeCrisisX + 10;
+      splitPriceBoxX = splitCrisisBoxX + activeCrisisLabelW + 10;
+    }
+    if (splitPriceBoxX + tooltipW > width - padding.right) {
+      // No room to the right either — stack both to the left, price closer to the line.
+      splitPriceBoxX = activeCrisisX - 10 - tooltipW;
+      splitCrisisBoxX = splitPriceBoxX - activeCrisisLabelW - 10;
+      if (splitCrisisBoxX < padding.left) splitCrisisBoxX = padding.left;
+    }
+  }
+
+  // Tooltip box: flip to the left of the cursor if it would overflow the right
+  // edge — unless a crisis marker is active, in which case it uses the split
+  // position computed above instead.
   const tooltipX =
-    hoverX !== null ? (hoverX + tooltipW + 8 > width ? hoverX - tooltipW - 10 : hoverX + 10) : 0;
+    hoverX !== null
+      ? activeCrisisX !== null
+        ? splitPriceBoxX
+        : hoverX + tooltipW + 8 > width
+          ? hoverX - tooltipW - 10
+          : hoverX + 10
+      : 0;
 
   return (
     <div className="flex flex-col gap-2">
@@ -369,7 +404,10 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
             const x = xFor(c.t);
             const label = lang === "zh" ? c.zh : c.en;
             const w = labelWidth(label);
-            const boxX = Math.min(Math.max(x - w / 2, padding.left), width - padding.right - w);
+            // Uses the split position computed above (crisis-left/price-right
+            // of the line by default, falling back to stacking near an edge)
+            // so this box and the price tooltip never overlap.
+            const boxX = hoveredCrisis === c.date ? splitCrisisBoxX : 0;
             return (
               <g key={c.date}>
                 <line
