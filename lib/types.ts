@@ -3,10 +3,19 @@ export interface PricePoint {
   close: number;
 }
 
+export interface SplitEvent {
+  date: string; // YYYY-MM-DD
+  ratio: string; // e.g. "2:1" for a 2-for-1 forward split
+}
+
 export interface SymbolSeries {
   symbol: string;
   name?: string;
   prices: PricePoint[];
+  /** Stock/ETF splits within the fetched range, from Yahoo's split events —
+   *  undefined (not []) when the source (e.g. the Stooq fallback) doesn't
+   *  report split history, so "no splits" can be told apart from "unknown". */
+  splits?: SplitEvent[];
 }
 
 export interface BacktestMetrics {
@@ -41,6 +50,13 @@ export interface BacktestMetrics {
    *  roughly even swing count. */
   swingUpAvgPct?: number | null;
   swingDownAvgPct?: number | null;
+  /** Number of stock/ETF splits within the backtest window — undefined when
+   *  the data source doesn't report split history (see SymbolSeries.splits).
+   *  A low share price alone doesn't mean low returns: frequent forward
+   *  splits (common for popular leveraged ETFs) keep the nominal price low
+   *  even after a huge cumulative return, since Yahoo's close price is
+   *  already split-adjusted and unaffected either way. */
+  splitCount?: number;
 }
 
 export interface Recommendation {

@@ -515,6 +515,9 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
             {mode === "price" ? `(${activeCurrency})` : lang === "zh" ? "(指數＝100)" : "(Index=100)"}
           </span>
         </div>
+        {mode === "price" && (
+          <p className="text-xs opacity-50 mt-0.5">{T.splitAdjustedNote}</p>
+        )}
       </div>
     </div>
   );

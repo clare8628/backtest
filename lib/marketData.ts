@@ -1,4 +1,4 @@
-import { PricePoint, SymbolSeries } from "./types";
+import { PricePoint, SplitEvent, SymbolSeries } from "./types";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -29,7 +29,7 @@ async function fetchFromYahoo(symbol: string, rangeYears: number): Promise<Symbo
   const range = yearsToYahooRange(rangeYears);
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
     symbol
-  )}?range=${range}&interval=1d`;
+  )}?range=${range}&interval=1d&events=split`;
 
   const res = await fetch(url, {
     headers: {
@@ -72,8 +72,26 @@ async function fetchFromYahoo(symbol: string, rangeYears: number): Promise<Symbo
   cutoff.setFullYear(cutoff.getFullYear() - rangeYears);
   const trimmed = prices.filter((p) => new Date(p.date) >= cutoff);
   const finalPrices = trimmed.length >= 2 ? trimmed : prices;
+  const usedCutoff = trimmed.length >= 2 ? cutoff : null;
 
-  return { symbol: symbol.toUpperCase(), prices: finalPrices };
+  // Historical prices from this endpoint are already split-adjusted (no
+  // artificial jump around a split date), so a low share price never means a
+  // low return — but that also makes splits invisible in the price series
+  // itself. Surface them explicitly from the requested split events instead.
+  const rawSplits = result?.events?.splits as
+    | Record<string, { date: number; numerator?: number; denominator?: number; splitRatio?: string }>
+    | undefined;
+  const splits: SplitEvent[] = rawSplits
+    ? Object.values(rawSplits)
+        .map((s) => ({
+          date: new Date(s.date * 1000).toISOString().slice(0, 10),
+          ratio: s.splitRatio ?? `${s.numerator ?? "?"}:${s.denominator ?? "?"}`,
+        }))
+        .filter((s) => usedCutoff === null || new Date(s.date) >= usedCutoff)
+        .sort((a, b) => (a.date < b.date ? -1 : 1))
+    : [];
+
+  return { symbol: symbol.toUpperCase(), prices: finalPrices, splits };
 }
 
 function yearsToYahooRange(years: number): string {

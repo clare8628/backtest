@@ -55,6 +55,8 @@ export const dict = {
     swingDownCount: "下跌波段次數",
     swingUpAvgPct: "平均漲幅(%)",
     swingDownAvgPct: "平均跌幅(%)",
+    splitCount: "分割次數",
+    splitAdjustedNote: "股價已依分割回溯調整",
   },
   en: {
     title: "ETF & Stock Backtest Platform",
@@ -110,6 +112,8 @@ export const dict = {
     swingDownCount: "Down Swings",
     swingUpAvgPct: "Avg Up Swing (%)",
     swingDownAvgPct: "Avg Down Swing (%)",
+    splitCount: "Splits",
+    splitAdjustedNote: "Prices are split-adjusted",
   },
 } as const;
 

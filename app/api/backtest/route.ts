@@ -136,6 +136,11 @@ export async function POST(req: NextRequest) {
       const benchmarkSymbol = benchmarkFor(s.symbol);
       const m = computeMetrics(s, startValue, benchmarkReturns.get(benchmarkSymbol) ?? []);
       const swings = countSwings(s.prices, swingThresholdPct);
+      // Splits within the aligned backtest window specifically — s.splits
+      // itself still spans the full requested rangeYears fetch, untrimmed.
+      const splitCount = s.splits
+        ? s.splits.filter((sp) => (!window || (sp.date >= window.start && sp.date <= window.end))).length
+        : undefined;
       return {
         ...m,
         benchmarkSymbol,
@@ -144,6 +149,7 @@ export async function POST(req: NextRequest) {
         swingDownCount: swings.down,
         swingUpAvgPct: swings.avgUpPct === null ? null : round2(swings.avgUpPct),
         swingDownAvgPct: swings.avgDownPct === null ? null : round2(swings.avgDownPct),
+        splitCount,
       };
     });
     const recommendations = recommend(metrics);

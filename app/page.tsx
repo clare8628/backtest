@@ -475,6 +475,7 @@ export default function Home() {
                               <th className="py-1 pr-4 text-xs">{T.beta}</th>
                               <th className="py-1 pr-4 text-xs">{T.fee}</th>
                               <th className="py-1 pr-4 text-xs">{T.maxBacktestYears}</th>
+                              <th className="py-1 pr-4 text-xs">{T.splitCount}</th>
                               <th className="py-1 pr-4 text-xs">{T.swingUpCount}</th>
                               <th className="py-1 pr-4 text-xs">{T.swingDownCount}</th>
                               <th className="py-1 pr-4 text-xs">{T.swingUpAvgPct}</th>
@@ -511,6 +512,9 @@ export default function Home() {
                                 <td className="py-1.5 pr-4 text-xs">{m.managementFee}%</td>
                                 <td className="py-1.5 pr-4 text-xs">
                                   {m.maxBacktestYears !== undefined ? m.maxBacktestYears : "—"}
+                                </td>
+                                <td className="py-1.5 pr-4 text-xs">
+                                  {m.splitCount !== undefined ? m.splitCount : "—"}
                                 </td>
                                 <td className="py-1.5 pr-4 text-xs">
                                   {m.swingUpCount !== undefined ? m.swingUpCount : "—"}
