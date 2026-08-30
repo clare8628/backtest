@@ -403,17 +403,31 @@ export function trimToWindow(
  * that extreme. This ignores day-to-day noise below the threshold and only
  * counts a leg once it's actually reversed — an ongoing move at the end of
  * the window that hasn't yet reversed is not counted.
+ *
+ * Also reports each direction's average leg size (% move from that leg's
+ * starting pivot to its ending extreme). Up/down *counts* are near-useless
+ * for judging a trend's strength — completed legs strictly alternate
+ * direction, so the two counts can never differ by more than 1 regardless of
+ * the asset, the threshold, or whether it trended up or down overall. What
+ * actually drives long-run compounding despite a roughly even leg count is
+ * *asymmetric magnitude* — up legs averaging bigger than down legs (or the
+ * reverse) — which only the average-size figures surface.
  */
 export function countSwings(
   prices: PricePoint[],
   thresholdPct: number
-): { up: number; down: number } {
-  if (prices.length < 2 || thresholdPct <= 0) return { up: 0, down: 0 };
+): { up: number; down: number; avgUpPct: number | null; avgDownPct: number | null } {
+  if (prices.length < 2 || thresholdPct <= 0) {
+    return { up: 0, down: 0, avgUpPct: null, avgDownPct: null };
+  }
   const threshold = thresholdPct / 100;
   let up = 0;
   let down = 0;
+  let upSumPct = 0;
+  let downSumPct = 0;
   let direction: 1 | -1 | 0 = 0; // 0 = initial direction not yet confirmed
-  let extreme = prices[0].close;
+  let legStart = prices[0].close; // pivot price where the current leg began
+  let extreme = prices[0].close; // running high (direction 1) or low (direction -1) of the current leg
 
   for (let i = 1; i < prices.length; i++) {
     const price = prices[i].close;
@@ -432,7 +446,9 @@ export function countSwings(
         extreme = price;
       } else if (price <= extreme * (1 - threshold)) {
         up++;
+        upSumPct += ((extreme - legStart) / legStart) * 100;
         direction = -1;
+        legStart = extreme;
         extreme = price;
       }
     } else {
@@ -440,11 +456,18 @@ export function countSwings(
         extreme = price;
       } else if (price >= extreme * (1 + threshold)) {
         down++;
+        downSumPct += ((legStart - extreme) / legStart) * 100;
         direction = 1;
+        legStart = extreme;
         extreme = price;
       }
     }
   }
 
-  return { up, down };
+  return {
+    up,
+    down,
+    avgUpPct: up > 0 ? upSumPct / up : null,
+    avgDownPct: down > 0 ? downSumPct / down : null,
+  };
 }

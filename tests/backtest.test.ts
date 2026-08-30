@@ -282,16 +282,20 @@ describe("normalizeToIndex", () => {
 });
 
 describe("countSwings", () => {
-  it("counts one completed up-swing once price reverses down past the threshold", () => {
-    const { up, down } = countSwings(series([100, 105, 110, 120, 130, 100, 90]), 10);
+  it("counts one completed up-swing once price reverses down past the threshold, sized from its start pivot to its peak", () => {
+    const { up, down, avgUpPct, avgDownPct } = countSwings(series([100, 105, 110, 120, 130, 100, 90]), 10);
     expect(up).toBe(1);
     expect(down).toBe(0);
+    expect(avgUpPct).toBeCloseTo(30, 5); // 100 -> 130
+    expect(avgDownPct).toBeNull();
   });
 
-  it("counts one completed down-swing once price reverses up past the threshold", () => {
-    const { up, down } = countSwings(series([100, 90, 80, 70, 85, 100, 115]), 10);
+  it("counts one completed down-swing once price reverses up past the threshold, sized from its start pivot to its trough", () => {
+    const { up, down, avgUpPct, avgDownPct } = countSwings(series([100, 90, 80, 70, 85, 100, 115]), 10);
     expect(down).toBe(1);
     expect(up).toBe(0);
+    expect(avgDownPct).toBeCloseTo(30, 5); // 100 -> 70
+    expect(avgUpPct).toBeNull();
   });
 
   it("does not count an in-progress leg that hasn't reversed by the threshold yet", () => {
@@ -307,8 +311,15 @@ describe("countSwings", () => {
     expect(down).toBe(0);
   });
 
-  it("returns zero swings for a non-positive threshold or too few points", () => {
-    expect(countSwings(series([100, 200]), 0)).toEqual({ up: 0, down: 0 });
-    expect(countSwings(series([100]), 10)).toEqual({ up: 0, down: 0 });
+  it("averages leg size across multiple completed swings in the same direction", () => {
+    // Up legs: 100->120 (+20%), then (after a down leg) 100->140 (+40%). Average 30%.
+    const { up, avgUpPct } = countSwings(series([100, 120, 100, 140, 110]), 10);
+    expect(up).toBe(2);
+    expect(avgUpPct).toBeCloseTo(30, 5);
+  });
+
+  it("returns zero swings and null averages for a non-positive threshold or too few points", () => {
+    expect(countSwings(series([100, 200]), 0)).toEqual({ up: 0, down: 0, avgUpPct: null, avgDownPct: null });
+    expect(countSwings(series([100]), 10)).toEqual({ up: 0, down: 0, avgUpPct: null, avgDownPct: null });
   });
 });

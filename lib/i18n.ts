@@ -53,6 +53,8 @@ export const dict = {
     swingThreshold: "波段反轉門檻(%)",
     swingUpCount: "上漲波段次數",
     swingDownCount: "下跌波段次數",
+    swingUpAvgPct: "平均漲幅(%)",
+    swingDownAvgPct: "平均跌幅(%)",
   },
   en: {
     title: "ETF & Stock Backtest Platform",
@@ -106,6 +108,8 @@ export const dict = {
     swingThreshold: "Swing Threshold (%)",
     swingUpCount: "Up Swings",
     swingDownCount: "Down Swings",
+    swingUpAvgPct: "Avg Up Swing (%)",
+    swingDownAvgPct: "Avg Down Swing (%)",
   },
 } as const;
 

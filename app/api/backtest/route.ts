@@ -142,6 +142,8 @@ export async function POST(req: NextRequest) {
         maxBacktestYears: round2(maxBacktestYears[s.symbol] ?? 0),
         swingUpCount: swings.up,
         swingDownCount: swings.down,
+        swingUpAvgPct: swings.avgUpPct === null ? null : round2(swings.avgUpPct),
+        swingDownAvgPct: swings.avgDownPct === null ? null : round2(swings.avgDownPct),
       };
     });
     const recommendations = recommend(metrics);

@@ -477,6 +477,8 @@ export default function Home() {
                               <th className="py-1 pr-4 text-xs">{T.maxBacktestYears}</th>
                               <th className="py-1 pr-4 text-xs">{T.swingUpCount}</th>
                               <th className="py-1 pr-4 text-xs">{T.swingDownCount}</th>
+                              <th className="py-1 pr-4 text-xs">{T.swingUpAvgPct}</th>
+                              <th className="py-1 pr-4 text-xs">{T.swingDownAvgPct}</th>
                               <th className="py-1 pr-4">{T.finalValue}</th>
                             </tr>
                           </thead>
@@ -515,6 +517,16 @@ export default function Home() {
                                 </td>
                                 <td className="py-1.5 pr-4 text-xs">
                                   {m.swingDownCount !== undefined ? m.swingDownCount : "—"}
+                                </td>
+                                <td className="py-1.5 pr-4 text-xs">
+                                  {m.swingUpAvgPct !== undefined && m.swingUpAvgPct !== null
+                                    ? `+${m.swingUpAvgPct}%`
+                                    : "—"}
+                                </td>
+                                <td className="py-1.5 pr-4 text-xs" style={{ color: "var(--negative)" }}>
+                                  {m.swingDownAvgPct !== undefined && m.swingDownAvgPct !== null
+                                    ? `-${m.swingDownAvgPct}%`
+                                    : "—"}
                                 </td>
                                 <td className="py-1.5 pr-4">{m.finalValue.toLocaleString()}</td>
                               </tr>

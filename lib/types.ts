@@ -28,9 +28,19 @@ export interface BacktestMetrics {
   maxBacktestYears?: number;
   /** Number of completed up/down price swings of at least swingThresholdPct
    *  within the backtest window (zigzag-style reversal count) — how many
-   *  times the symbol swung a meaningful amount in each direction. */
+   *  times the symbol swung a meaningful amount in each direction. These two
+   *  counts alone are a weak signal of trend strength: completed legs
+   *  strictly alternate direction, so up/down counts can never differ by
+   *  more than 1 regardless of the overall trend — see swingUpAvgPct /
+   *  swingDownAvgPct for what actually distinguishes a long-term uptrend. */
   swingUpCount?: number;
   swingDownCount?: number;
+  /** Average size (%) of each direction's completed legs — null when that
+   *  direction had zero completed legs. Asymmetry here (e.g. up legs
+   *  averaging bigger than down legs) is what drives compounding despite a
+   *  roughly even swing count. */
+  swingUpAvgPct?: number | null;
+  swingDownAvgPct?: number | null;
 }
 
 export interface Recommendation {
