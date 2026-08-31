@@ -19,6 +19,15 @@ interface BacktestResult {
 
 const DEBOUNCE_MS = 500;
 
+/** Green above `neutral`, red below — used for the signed trend measures, where
+ *  the sign (not the magnitude) is what says "uptrend" vs "downtrend". */
+function trendColor(value: number | null | undefined, neutral = 0): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (value > neutral) return "var(--positive)";
+  if (value < neutral) return "var(--negative)";
+  return undefined;
+}
+
 export default function Home() {
   const [lang, setLang] = useState<Lang>("zh");
   const T = useMemo(() => t(lang), [lang]);
@@ -476,10 +485,12 @@ export default function Home() {
                               <th className="py-1 pr-4 text-xs">{T.fee}</th>
                               <th className="py-1 pr-4 text-xs">{T.maxBacktestYears}</th>
                               <th className="py-1 pr-4 text-xs">{T.splitCount}</th>
-                              <th className="py-1 pr-4 text-xs">{T.swingUpCount}</th>
-                              <th className="py-1 pr-4 text-xs">{T.swingDownCount}</th>
                               <th className="py-1 pr-4 text-xs">{T.swingUpAvgPct}</th>
                               <th className="py-1 pr-4 text-xs">{T.swingDownAvgPct}</th>
+                              <th className="py-1 pr-4 text-xs">{T.trendR2}</th>
+                              <th className="py-1 pr-4 text-xs">{T.newHighMonthPct}</th>
+                              <th className="py-1 pr-4 text-xs">{T.positiveYearPct}</th>
+                              <th className="py-1 pr-4 text-xs">{T.gainPainRatio}</th>
                               <th className="py-1 pr-4">{T.finalValue}</th>
                             </tr>
                           </thead>
@@ -517,12 +528,6 @@ export default function Home() {
                                   {m.splitCount !== undefined ? m.splitCount : "—"}
                                 </td>
                                 <td className="py-1.5 pr-4 text-xs">
-                                  {m.swingUpCount !== undefined ? m.swingUpCount : "—"}
-                                </td>
-                                <td className="py-1.5 pr-4 text-xs">
-                                  {m.swingDownCount !== undefined ? m.swingDownCount : "—"}
-                                </td>
-                                <td className="py-1.5 pr-4 text-xs">
                                   {m.swingUpAvgPct !== undefined && m.swingUpAvgPct !== null
                                     ? `+${m.swingUpAvgPct}%`
                                     : "—"}
@@ -532,11 +537,42 @@ export default function Home() {
                                     ? `-${m.swingDownAvgPct}%`
                                     : "—"}
                                 </td>
+                                <td
+                                  className="py-1.5 pr-4 text-xs"
+                                  style={{ color: trendColor(m.trendR2) }}
+                                >
+                                  {m.trendR2 !== undefined && m.trendR2 !== null ? m.trendR2 : "—"}
+                                </td>
+                                <td className="py-1.5 pr-4 text-xs">
+                                  {m.newHighMonthPct !== undefined && m.newHighMonthPct !== null
+                                    ? `${m.newHighMonthPct}%`
+                                    : "—"}
+                                </td>
+                                <td className="py-1.5 pr-4 text-xs">
+                                  {m.positiveYearPct !== undefined && m.positiveYearPct !== null
+                                    ? `${m.positiveYearPct}%`
+                                    : "—"}
+                                </td>
+                                <td
+                                  className="py-1.5 pr-4 text-xs"
+                                  style={{ color: trendColor(m.gainPainRatio, 1) }}
+                                >
+                                  {m.gainPainRatio !== undefined && m.gainPainRatio !== null
+                                    ? m.gainPainRatio
+                                    : "—"}
+                                </td>
                                 <td className="py-1.5 pr-4">{m.finalValue.toLocaleString()}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
+                        <div
+                          className="rounded-lg px-3 py-2 mt-3 text-xs"
+                          style={{ background: "var(--background)", border: "1px solid var(--line)", color: "var(--foreground-muted)" }}
+                        >
+                          <p className="font-medium mb-1" style={{ color: "var(--foreground)" }}>{T.trendNote}</p>
+                          <p>{T.trendNoteText}</p>
+                        </div>
                       </div>
                     )}
 

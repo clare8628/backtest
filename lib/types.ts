@@ -35,21 +35,28 @@ export interface BacktestMetrics {
    *  listing date to today), independent of the currently selected range —
    *  a fund listed 2 years ago tops out at ~2 years regardless of the slider. */
   maxBacktestYears?: number;
-  /** Number of completed up/down price swings of at least swingThresholdPct
-   *  within the backtest window (zigzag-style reversal count) — how many
-   *  times the symbol swung a meaningful amount in each direction. These two
-   *  counts alone are a weak signal of trend strength: completed legs
-   *  strictly alternate direction, so up/down counts can never differ by
-   *  more than 1 regardless of the overall trend — see swingUpAvgPct /
-   *  swingDownAvgPct for what actually distinguishes a long-term uptrend. */
-  swingUpCount?: number;
-  swingDownCount?: number;
-  /** Average size (%) of each direction's completed legs — null when that
-   *  direction had zero completed legs. Asymmetry here (e.g. up legs
-   *  averaging bigger than down legs) is what drives compounding despite a
-   *  roughly even swing count. */
+  /** Average size (%) of each direction's completed swings of at least
+   *  swingThresholdPct — null when that direction had zero completed legs.
+   *  Swing *counts* are deliberately not reported: completed legs strictly
+   *  alternate direction, so up/down counts can never differ by more than 1
+   *  no matter how strongly the asset trends. Asymmetry in these averages
+   *  (up legs bigger than down legs) is what drives compounding despite a
+   *  perfectly even leg count. */
   swingUpAvgPct?: number | null;
   swingDownAvgPct?: number | null;
+  /** Direction-of-trend measures that swing counts structurally can't give.
+   *  All threshold-free, so they don't shift when swingThresholdPct is
+   *  retuned. See trendStrength() in backtest.ts for the full definitions.
+   *  - trendR2: R² (0–100) of ln(price) regressed on time, signed by slope —
+   *    how tightly the price tracks one steady exponential path, and which way.
+   *  - newHighMonthPct: % of months closing at a new high for the window.
+   *  - positiveYearPct: % of rolling 12-month holding periods that ended up.
+   *  - gainPainRatio: sum of up-month returns / sum of down-month returns;
+   *    >1 means up months outweigh down months in size, not just count. */
+  trendR2?: number | null;
+  newHighMonthPct?: number | null;
+  positiveYearPct?: number | null;
+  gainPainRatio?: number | null;
   /** Number of stock/ETF splits within the backtest window — undefined when
    *  the data source doesn't report split history (see SymbolSeries.splits).
    *  A low share price alone doesn't mean low returns: frequent forward

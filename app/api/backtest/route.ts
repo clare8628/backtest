@@ -9,6 +9,7 @@ import {
   downsamplePrices,
   fxLookup,
   countSwings,
+  trendStrength,
 } from "@/lib/backtest";
 import { fetchMultiple, fetchDailyPrices } from "@/lib/marketData";
 import { Currency, ChartSeries } from "@/lib/types";
@@ -136,6 +137,7 @@ export async function POST(req: NextRequest) {
       const benchmarkSymbol = benchmarkFor(s.symbol);
       const m = computeMetrics(s, startValue, benchmarkReturns.get(benchmarkSymbol) ?? []);
       const swings = countSwings(s.prices, swingThresholdPct);
+      const trend = trendStrength(s.prices);
       // Splits within the aligned backtest window specifically — s.splits
       // itself still spans the full requested rangeYears fetch, untrimmed.
       const splitCount = s.splits
@@ -145,10 +147,12 @@ export async function POST(req: NextRequest) {
         ...m,
         benchmarkSymbol,
         maxBacktestYears: round2(maxBacktestYears[s.symbol] ?? 0),
-        swingUpCount: swings.up,
-        swingDownCount: swings.down,
         swingUpAvgPct: swings.avgUpPct === null ? null : round2(swings.avgUpPct),
         swingDownAvgPct: swings.avgDownPct === null ? null : round2(swings.avgDownPct),
+        trendR2: trend.trendR2 === null ? null : round2(trend.trendR2),
+        newHighMonthPct: trend.newHighMonthPct === null ? null : round2(trend.newHighMonthPct),
+        positiveYearPct: trend.positiveYearPct === null ? null : round2(trend.positiveYearPct),
+        gainPainRatio: trend.gainPainRatio === null ? null : round2(trend.gainPainRatio),
         splitCount,
       };
     });

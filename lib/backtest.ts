@@ -404,14 +404,15 @@ export function trimToWindow(
  * counts a leg once it's actually reversed — an ongoing move at the end of
  * the window that hasn't yet reversed is not counted.
  *
- * Also reports each direction's average leg size (% move from that leg's
- * starting pivot to its ending extreme). Up/down *counts* are near-useless
- * for judging a trend's strength — completed legs strictly alternate
- * direction, so the two counts can never differ by more than 1 regardless of
- * the asset, the threshold, or whether it trended up or down overall. What
- * actually drives long-run compounding despite a roughly even leg count is
+ * Only each direction's *average leg size* is reported (% move from that leg's
+ * starting pivot to its ending extreme), not the leg counts: completed legs
+ * strictly alternate direction, so up/down counts can never differ by more
+ * than 1 regardless of the asset, the threshold, or whether it trended up or
+ * down overall — they carry no directional information at all. What actually
+ * drives long-run compounding despite a perfectly even leg count is
  * *asymmetric magnitude* — up legs averaging bigger than down legs (or the
- * reverse) — which only the average-size figures surface.
+ * reverse) — which only the average-size figures surface. See trendStrength()
+ * for the threshold-free measures of the same question.
  */
 export function countSwings(
   prices: PricePoint[],
@@ -470,4 +471,144 @@ export function countSwings(
     avgUpPct: up > 0 ? upSumPct / up : null,
     avgDownPct: down > 0 ? downSumPct / down : null,
   };
+}
+
+/** Closing price on the last trading day of each calendar month, in order. */
+export function monthEndCloses(prices: PricePoint[]): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < prices.length; i++) {
+    const month = prices[i].date.slice(0, 7);
+    const next = i + 1 < prices.length ? prices[i + 1].date.slice(0, 7) : null;
+    if (next !== month) out.push(prices[i].close);
+  }
+  return out;
+}
+
+export interface TrendStrength {
+  trendR2: number | null;
+  newHighMonthPct: number | null;
+  positiveYearPct: number | null;
+  gainPainRatio: number | null;
+}
+
+/** Rolling window, in months, for the "held it a year" statistic. */
+const MONTHS_PER_YEAR = 12;
+/** Don't report a rolling-year win rate off a handful of overlapping windows —
+ *  under ~2 years of history the sample is too small to mean anything. */
+const MIN_ROLLING_YEAR_WINDOWS = 12;
+
+/**
+ * Measures of *directional* trend strength — the thing swing counts
+ * structurally cannot show (see countSwings). All four are threshold-free, so
+ * unlike the swing figures they don't move when the user retunes a knob.
+ *
+ * - `trendR2`: R² (0–100) of an ordinary least-squares fit of ln(price) against
+ *   time, signed by the fitted slope. |R²| says how tightly the price hugs a
+ *   single steady exponential path; the sign says which way that path runs.
+ *   +90 is a relentless compounder, +20 a choppy asset that happens to have
+ *   drifted up, -90 a relentless decliner. Log space (not raw price) is what
+ *   makes a constant *percentage* growth rate score as a straight line.
+ * - `newHighMonthPct`: share of months closing at a new high for the window. An
+ *   asset in a strong uptrend rewrites its high constantly; a sideways one
+ *   almost never does again after its first peak.
+ * - `positiveYearPct`: share of all rolling 12-month holding periods inside the
+ *   window that ended in profit — "if I'd bought on a random day and held a
+ *   year, how often would I be up?".
+ * - `gainPainRatio`: sum of positive monthly returns over the absolute sum of
+ *   negative ones. This is the magnitude-weighted answer to the swing-count
+ *   symmetry: >1 means up months outweigh down months in aggregate size even
+ *   when there are just as many of each.
+ *
+ * The last three all run off month-end closes rather than the raw series on
+ * purpose. Yahoo silently coarsens long ranges from daily to monthly bars (see
+ * CEILING_FETCH_YEARS in the backtest route), so anything counted per *bar*
+ * would quietly change meaning at longer ranges — a 15-year comparison would
+ * report a "% of days at a new high" several times higher than a 10-year one
+ * purely from the bar size, and a 252-trading-day rolling window would find
+ * fewer than 252 bars in 15 years and give up entirely. Resampling to months
+ * first makes all three mean the same thing at every range. Daily returns would
+ * also squeeze gain/pain to within a hair of 1.00 for every asset, so monthly
+ * is the more legible unit for it regardless.
+ *
+ * Each is null when the window is too short to compute it honestly (rather than
+ * being filled with a degenerate value from a handful of points).
+ */
+export function trendStrength(prices: PricePoint[]): TrendStrength {
+  const n = prices.length;
+  if (n < 2) {
+    return { trendR2: null, newHighMonthPct: null, positiveYearPct: null, gainPainRatio: null };
+  }
+  const months = monthEndCloses(prices);
+
+  // --- Trend R², signed by slope: OLS of ln(close) on the day index ---
+  let trendR2: number | null = null;
+  const logs: number[] = [];
+  for (const p of prices) if (p.close > 0) logs.push(Math.log(p.close));
+  if (logs.length >= 3) {
+    const m = logs.length;
+    const xMean = (m - 1) / 2; // mean of 0..m-1
+    const yMean = mean(logs);
+    let sxy = 0;
+    let sxx = 0;
+    let syy = 0;
+    for (let i = 0; i < m; i++) {
+      const dx = i - xMean;
+      const dy = logs[i] - yMean;
+      sxy += dx * dy;
+      sxx += dx * dx;
+      syy += dy * dy;
+    }
+    // syy === 0 means a perfectly flat price — no trend to fit, not a perfect one.
+    if (sxx > 0 && syy > 0) {
+      const r2 = (sxy * sxy) / (sxx * syy);
+      trendR2 = Math.sign(sxy) * r2 * 100;
+    }
+  }
+
+  // --- Share of months closing at a new high for the window ---
+  // The first month is trivially its own high, so it's excluded from both
+  // numerator and denominator; a new high must beat every close before it.
+  let newHighMonthPct: number | null = null;
+  if (months.length >= 2) {
+    let peak = months[0];
+    let highs = 0;
+    for (let i = 1; i < months.length; i++) {
+      if (months[i] > peak) {
+        highs++;
+        peak = months[i];
+      }
+    }
+    newHighMonthPct = (highs / (months.length - 1)) * 100;
+  }
+
+  // --- Share of rolling 1-year holding periods that ended in profit ---
+  let positiveYearPct: number | null = null;
+  {
+    const windows = months.length - MONTHS_PER_YEAR;
+    if (windows >= MIN_ROLLING_YEAR_WINDOWS) {
+      let wins = 0;
+      for (let i = 0; i < windows; i++) {
+        if (months[i + MONTHS_PER_YEAR] > months[i]) wins++;
+      }
+      positiveYearPct = (wins / windows) * 100;
+    }
+  }
+
+  // --- Gain-to-pain on monthly returns ---
+  let gainPainRatio: number | null = null;
+  {
+    let gain = 0;
+    let pain = 0;
+    for (let i = 1; i < months.length; i++) {
+      if (months[i - 1] <= 0) continue;
+      const r = (months[i] - months[i - 1]) / months[i - 1];
+      if (r > 0) gain += r;
+      else pain += -r;
+    }
+    // A window with no down months at all has no "pain" to divide by — leave it
+    // null rather than reporting an infinite ratio.
+    if (pain > 0) gainPainRatio = gain / pain;
+  }
+
+  return { trendR2, newHighMonthPct, positiveYearPct, gainPainRatio };
 }

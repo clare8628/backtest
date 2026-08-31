@@ -1,10 +1,27 @@
 import { describe, it, expect } from "vitest";
-import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, countSwings } from "@/lib/backtest";
+import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, countSwings, monthEndCloses, trendStrength } from "@/lib/backtest";
 import { parseStooqCsv, toStooqSymbol } from "@/lib/marketData";
 import { PricePoint, BacktestMetrics } from "@/lib/types";
 
 function series(closes: number[]): PricePoint[] {
   return closes.map((close, i) => ({ date: `2024-01-${String(i + 1).padStart(2, "0")}`, close }));
+}
+
+/** Consecutive real calendar dates, so month boundaries land where they really do. */
+function dailySeries(closes: number[]): PricePoint[] {
+  const start = Date.parse("2015-01-01T00:00:00Z");
+  return closes.map((close, i) => ({
+    date: new Date(start + i * 86_400_000).toISOString().slice(0, 10),
+    close,
+  }));
+}
+
+/** One point per calendar month, so each becomes its own month-end close. */
+function monthlySeries(closes: number[]): PricePoint[] {
+  return closes.map((close, i) => ({
+    date: `${2015 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}-15`,
+    close,
+  }));
 }
 
 describe("dailyReturns", () => {
@@ -321,5 +338,125 @@ describe("countSwings", () => {
   it("returns zero swings and null averages for a non-positive threshold or too few points", () => {
     expect(countSwings(series([100, 200]), 0)).toEqual({ up: 0, down: 0, avgUpPct: null, avgDownPct: null });
     expect(countSwings(series([100]), 10)).toEqual({ up: 0, down: 0, avgUpPct: null, avgDownPct: null });
+  });
+
+  it("can never separate an uptrend from a downtrend by leg count alone", () => {
+    // The premise behind reporting only the averages: legs strictly alternate,
+    // so a relentless riser and a relentless faller both come out ~even.
+    const riser = countSwings(series([100, 80, 130, 105, 170, 140, 220]), 10);
+    const faller = countSwings(series([100, 130, 80, 105, 60, 80, 45]), 10);
+    expect(Math.abs(riser.up - riser.down)).toBeLessThanOrEqual(1);
+    expect(Math.abs(faller.up - faller.down)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("monthEndCloses", () => {
+  it("takes the last close of each calendar month", () => {
+    const prices: PricePoint[] = [
+      { date: "2024-01-30", close: 10 },
+      { date: "2024-01-31", close: 11 },
+      { date: "2024-02-01", close: 12 },
+      { date: "2024-02-29", close: 13 },
+      { date: "2024-03-01", close: 14 },
+    ];
+    expect(monthEndCloses(prices)).toEqual([11, 13, 14]);
+  });
+
+  it("returns an empty list for an empty series", () => {
+    expect(monthEndCloses([])).toEqual([]);
+  });
+});
+
+describe("trendStrength", () => {
+  it("scores a steady exponential riser near +100 and a steady faller near -100", () => {
+    const up = dailySeries(Array.from({ length: 300 }, (_, i) => 100 * 1.002 ** i));
+    const down = dailySeries(Array.from({ length: 300 }, (_, i) => 100 * 0.998 ** i));
+    expect(trendStrength(up).trendR2).toBeCloseTo(100, 6);
+    expect(trendStrength(down).trendR2).toBeCloseTo(-100, 6);
+  });
+
+  it("scores a sideways oscillation near zero, unlike either trend", () => {
+    const flat = dailySeries(
+      Array.from({ length: 300 }, (_, i) => 100 + 10 * Math.sin((i / 300) * 8 * Math.PI))
+    );
+    expect(Math.abs(trendStrength(flat).trendR2!)).toBeLessThan(20);
+  });
+
+  it("counts a new high in every month of a monotonic rise, and just one after an early peak", () => {
+    const rising = monthlySeries(Array.from({ length: 36 }, (_, i) => 100 + i));
+    expect(trendStrength(rising).newHighMonthPct).toBeCloseTo(100, 6);
+
+    // Peaks in month 2 and never exceeds it again — 1 new high out of 35 months.
+    const peaked = monthlySeries([100, 150, ...Array.from({ length: 34 }, () => 120)]);
+    expect(trendStrength(peaked).newHighMonthPct).toBeCloseTo((1 / 35) * 100, 6);
+  });
+
+  it("reports the share of rolling 12-month holds that ended in profit", () => {
+    // Rises for the first half, then gives it all back: early entries are up a
+    // year later, late ones aren't.
+    const closes = [
+      ...Array.from({ length: 30 }, (_, i) => 100 + i),
+      ...Array.from({ length: 30 }, (_, i) => 130 - i),
+    ];
+    const pct = trendStrength(monthlySeries(closes)).positiveYearPct!;
+    expect(pct).toBeGreaterThan(0);
+    expect(pct).toBeLessThan(100);
+
+    const alwaysUp = monthlySeries(Array.from({ length: 60 }, (_, i) => 100 + i));
+    expect(trendStrength(alwaysUp).positiveYearPct).toBeCloseTo(100, 6);
+  });
+
+  it("leaves the 1-year win rate null when there are too few rolling windows to mean anything", () => {
+    // 20 months = only 8 overlapping 12-month windows, under the minimum.
+    expect(trendStrength(monthlySeries(Array.from({ length: 20 }, (_, i) => 100 + i))).positiveYearPct)
+      .toBeNull();
+  });
+
+  it("gives the same monthly-basis answers whether the source bars are daily or monthly", () => {
+    // The data source silently switches daily -> monthly bars over long ranges,
+    // so the same underlying path must not score differently just because it
+    // arrived at a coarser resolution. Build 36 months of daily bars, then the
+    // month-end closes of that very series, and compare.
+    const daily: PricePoint[] = [];
+    const start = Date.parse("2015-01-01T00:00:00Z");
+    for (let d = 0; d < 36 * 30; d++) {
+      daily.push({
+        date: new Date(start + d * 86_400_000).toISOString().slice(0, 10),
+        close: 100 * 1.0005 ** d,
+      });
+    }
+    const monthly = monthEndCloses(daily).map((close, i) => ({
+      date: `${2015 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}-28`,
+      close,
+    }));
+
+    const fromDaily = trendStrength(daily);
+    const fromMonthly = trendStrength(monthly);
+    expect(fromDaily.newHighMonthPct).toBeCloseTo(fromMonthly.newHighMonthPct!, 6);
+    expect(fromDaily.positiveYearPct).toBeCloseTo(fromMonthly.positiveYearPct!, 6);
+    expect(fromDaily.gainPainRatio).toBe(fromMonthly.gainPainRatio); // both null: no down months
+  });
+
+  it("separates up from down by magnitude even when up and down months are equal in number", () => {
+    // Six +20% months alternating with six -10% months — the case swing counts
+    // call a tie. Gain/pain = (6 x 0.20) / (6 x 0.10) = 2.
+    const closes = [100];
+    for (let i = 0; i < 12; i++) {
+      closes.push(closes[closes.length - 1] * (i % 2 === 0 ? 1.2 : 0.9));
+    }
+    expect(trendStrength(monthlySeries(closes)).gainPainRatio).toBeCloseTo(2, 6);
+  });
+
+  it("leaves gain/pain null when there are no down months to divide by", () => {
+    expect(trendStrength(monthlySeries([100, 110, 120, 130])).gainPainRatio).toBeNull();
+  });
+
+  it("returns all-null for a series too short to measure", () => {
+    expect(trendStrength([])).toEqual({
+      trendR2: null,
+      newHighMonthPct: null,
+      positiveYearPct: null,
+      gainPainRatio: null,
+    });
   });
 });
