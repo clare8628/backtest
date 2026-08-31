@@ -181,21 +181,17 @@ export function splitsUnreported(symbol: string): SplitEvent[] | undefined {
 // shows a dash, which is the honest outcome for a number we could not read.
 
 const CRUMB_TTL_MS = 30 * 60 * 1000;
+// Only ever plain strings. Caching the in-flight *promise* here to share one
+// handshake between concurrent callers looks like the obvious optimisation and
+// is a trap: a Worker may not await I/O created during a different request, so
+// a promise cached across requests throws for every later caller and every
+// fund size comes back empty. Cached data is portable across requests;
+// cached I/O is not.
 let crumbSession: { cookie: string; crumb: string; at: number } | null = null;
-// Every symbol in a comparison asks for its fund size at once, so on a cold
-// worker they all reach the handshake together. Without sharing the in-flight
-// attempt each one runs its own, and the losers of that race come back empty —
-// which showed up in production as fund size resolving for some symbols and
-// not others on the first request after a deploy. One handshake, N waiters.
-let crumbInFlight: Promise<{ cookie: string; crumb: string } | null> | null = null;
 
 async function yahooCrumbSession(): Promise<{ cookie: string; crumb: string } | null> {
   if (crumbSession && Date.now() - crumbSession.at < CRUMB_TTL_MS) return crumbSession;
-  if (crumbInFlight) return crumbInFlight;
-  crumbInFlight = negotiateCrumb().finally(() => {
-    crumbInFlight = null;
-  });
-  return crumbInFlight;
+  return negotiateCrumb();
 }
 
 async function negotiateCrumb(): Promise<{ cookie: string; crumb: string } | null> {
@@ -215,12 +211,31 @@ async function negotiateCrumb(): Promise<{ cookie: string; crumb: string } | nul
   }
 }
 
-/** Net assets under management, in the fund's own trading currency. Null for
- *  anything the source has no figure for (individual stocks, or a failed
- *  fetch) — never estimated from price or volume. */
-export async function fetchFundSize(symbol: string): Promise<number | null> {
+/**
+ * Net assets for a whole comparison at once, in each fund's own trading
+ * currency. Null for anything the source has no figure for (individual stocks,
+ * or a failed fetch) — never estimated from price or volume.
+ *
+ * Batched deliberately: the handshake is negotiated once here and handed to
+ * every lookup, so N symbols cost one handshake instead of N racing ones,
+ * without caching a promise across requests (see crumbSession).
+ */
+export async function fetchFundSizes(symbols: string[]): Promise<Map<string, number | null>> {
+  const sizes = new Map<string, number | null>(symbols.map((s) => [s, null]));
   const session = await yahooCrumbSession();
-  if (!session) return null;
+  if (!session) return sizes;
+  await Promise.all(
+    symbols.map(async (symbol) => {
+      sizes.set(symbol, await fetchFundSize(symbol, session));
+    })
+  );
+  return sizes;
+}
+
+async function fetchFundSize(
+  symbol: string,
+  session: { cookie: string; crumb: string }
+): Promise<number | null> {
   try {
     const url =
       `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}` +

@@ -11,7 +11,7 @@ import {
   trendStrength,
   incomeProfile,
 } from "@/lib/backtest";
-import { fetchMultiple, fetchDailyPrices, fetchFundSize, isTaiwanListed } from "@/lib/marketData";
+import { fetchMultiple, fetchDailyPrices, fetchFundSizes, isTaiwanListed } from "@/lib/marketData";
 import { Currency, ChartSeries } from "@/lib/types";
 import { getAssetClass, getCreditRating, hasKnownManagementFee } from "@/lib/symbolCatalog";
 
@@ -129,12 +129,7 @@ export async function POST(req: NextRequest) {
     // Net assets live on a separate, rate-limited Yahoo endpoint, so fetch all
     // of them together and let any individual failure fall through as null
     // rather than holding up (or failing) the whole backtest.
-    const fundSizes = new Map<string, number | null>();
-    await Promise.all(
-      alignedResults.map(async (s) => {
-        fundSizes.set(s.symbol, await fetchFundSize(s.symbol));
-      })
-    );
+    const fundSizes = await fetchFundSizes(alignedResults.map((s) => s.symbol));
 
     const metrics = alignedResults.map((s) => {
       const benchmarkSymbol = benchmarkFor(s.symbol);
