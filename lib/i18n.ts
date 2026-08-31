@@ -72,6 +72,23 @@ export const dict = {
       "趨勢指標衡量的是「路徑品質」，累積報酬則取決於「每期報酬的幅度 × 複利」，兩者可以背道而馳。本區把年化報酬拆開來看，恆等式為：年化報酬 = 算術平均年報酬 − 波動耗損。算術平均年報酬是尚未複利前的原始漲勢；波動耗損則是顛簸路徑每年吃掉的部分（漲跌同幅度會低於原點，約等於變異數的一半）。3 倍槓桿 ETF 的耗損可能是原型的十幾倍，但它的原始漲勢也是 3 倍，因此仍可能大勝。上漲/下跌捕獲率顯示這個機制：相對基準指數，它在漲跌兩邊各吃下約 3 倍，而基準本身漲多於跌。報酬回撤比（年化報酬 ÷ 最大回撤）則回答「這些多出來的報酬是打折買到的，還是照原價付清的」。",
     resolutionNote:
       "註：資料來源在較長區間會自動改為月線，因此波動度、夏普、波動耗損在不同回測年數間不完全可比（趨勢方向各項已統一以月收盤價計算，不受影響）。",
+    groupIncome: "債券／收益評估",
+    assetClass: "標的類別",
+    creditRating: "信用評級",
+    fundSize: "基金規模",
+    estimatedYield: "估計年化殖利率",
+    distributionFreq: "配息頻率",
+    freqMonthly: "月配",
+    freqQuarterly: "季配",
+    freqSemiannual: "半年配",
+    freqAnnual: "年配",
+    freqOther: "不定期",
+    perYear: "次/年",
+    incomeNote: "債券／收益指標的資料來源",
+    incomeNoteText:
+      "估計年化殖利率＝過去 12 個月「實際配發」的每股配息總額 ÷ 最新收盤價，是回顧性的已實現殖利率，不是預測；債券配息會隨利率與持債更動，去年的數字只是參考而非保證。配息頻率為同一區間內的實際配息次數（12 次＝月配、4 次＝季配）。基金規模為資料來源提供的即時淨資產，以該標的自身的交易幣別計價（美股為美元、台股為新台幣）。標的類別與信用評級為人工整理，取自各基金官方名稱所載的信用級別（台灣的基金命名規則要求載明「投資級／A級／BBB／非投等」等字樣）；名稱未載明級別者一律留空顯示「—」，不做推測，實際平均信用評級請以各投信公開說明書與月報為準。個股與未收錄標的的相關欄位皆顯示「—」。",
+    twoSuffixNote:
+      "註：台灣的債券 ETF 均在櫃買中心（TPEx）掛牌，代號後綴為 .TWO 而非 .TW；本平台已一併校正其計價幣別（新台幣）與對標基準（0050）。",
     trendNote: "長期向上趨勢指標",
     trendNoteText:
       "以下四項專門呈現趨勢的「方向」，且都不需要任何可調參數 —— 趨勢強度R²：價格貼合單一指數成長軌跡的程度（取 ln 價格對時間迴歸，帶正負號代表方向，+90 為極穩定長多、-90 為長空）；創新高月份：改寫期間新高的月份佔比；持有一年獲利率：任一月進場並持有 12 個月仍獲利的比例；漲跌動能比：上漲月份漲幅總和 ÷ 下跌月份跌幅總和，大於 1 代表漲勢的「幅度」勝過跌勢，而非只看次數。後三項一律以月收盤價計算，因為資料來源在長區間會自動改成月線，若按每根K棒計數會讓同一指標在不同回測年數下代表不同意義。",
@@ -149,6 +166,23 @@ export const dict = {
       "Trend measures score the *path*; cumulative return depends on the *size* of each period's move compounded — the two can point opposite ways. This section splits the annualized return apart, with the identity: Annualized Return = Arithmetic Ann. Return − Volatility Drag. The arithmetic figure is the raw upward drift before compounding takes its cut; the drag is what a bumpy path costs each year (gaining and losing the same percentage leaves you below where you started, roughly variance/2). A 3x fund can pay a dozen times its underlying's drag and still finish far ahead, because its raw drift is 3x too. Up/Down Capture shows that mechanism: it takes ~3x of the benchmark's moves in both directions, and the benchmark simply had more up than down. Calmar (annualized return ÷ max drawdown) answers whether that extra return came at a discount or was paid for in full.",
     resolutionNote:
       "Note: the data source switches to monthly bars over longer ranges, so volatility, Sharpe, and drag aren't strictly comparable across different backtest lengths. The trend-direction measures all use month-end closes and are unaffected.",
+    groupIncome: "Bond / Income",
+    assetClass: "Asset Class",
+    creditRating: "Credit Rating",
+    fundSize: "Fund Size (AUM)",
+    estimatedYield: "Est. Annual Yield",
+    distributionFreq: "Distribution Frequency",
+    freqMonthly: "Monthly",
+    freqQuarterly: "Quarterly",
+    freqSemiannual: "Semi-annual",
+    freqAnnual: "Annual",
+    freqOther: "Irregular",
+    perYear: "/yr",
+    incomeNote: "Where the bond / income figures come from",
+    incomeNoteText:
+      "Est. Annual Yield is the distributions actually paid per share over the last 12 months divided by the latest close — a backward-looking realised yield, not a forecast. Bond payouts move with rates and holdings, so last year's figure is evidence, not a promise. Distribution Frequency is the number of payments in that same window (12 = monthly, 4 = quarterly). Fund Size is live net assets from the data source, in the fund's own trading currency (USD for US-listed, TWD for Taiwan-listed). Asset Class and Credit Rating are curated from each fund's official name, which under Taiwanese naming rules must state its credit tier; funds whose name states no tier are left blank rather than guessed — check the issuer's prospectus for an actual average rating. Individual stocks and uncatalogued symbols show a dash throughout.",
+    twoSuffixNote:
+      "Note: Taiwan's bond ETFs all list on TPEx and carry a .TWO suffix rather than .TW; their currency (TWD) and benchmark (0050) are handled accordingly.",
     trendNote: "Long-term uptrend measures",
     trendNoteText:
       "These four show the *direction* of a trend, and none of them has a parameter to tune — Trend R²: how tightly price tracks one steady exponential path (ln price regressed on time), signed by slope, so +90 is a relentless compounder and -90 a relentless decliner. New Highs: share of months closing at a new high for the window. 1-Yr Hold Win Rate: share of rolling 12-month holding periods that ended in profit. Gain/Pain: sum of up-month returns ÷ sum of down-month returns — above 1 means up moves win on size, not just count. The last three all run off month-end closes because the data source silently switches to monthly bars over long ranges, which would otherwise make a per-bar count mean something different at each backtest length.",

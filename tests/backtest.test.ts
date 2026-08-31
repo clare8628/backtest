@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev } from "@/lib/backtest";
-import { parseStooqCsv, toStooqSymbol, splitsUnreported } from "@/lib/marketData";
+import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev, incomeProfile } from "@/lib/backtest";
+import { parseStooqCsv, toStooqSymbol, splitsUnreported, isTaiwanListed, symbolCandidates } from "@/lib/marketData";
 import { PricePoint, BacktestMetrics } from "@/lib/types";
 
 function series(closes: number[]): PricePoint[] {
@@ -501,5 +501,87 @@ describe("splitsUnreported", () => {
     // though its prices are adjusted for it, so a "0" here would be a lie.
     expect(splitsUnreported("0050.TW")).toBeUndefined();
     expect(splitsUnreported("006208.tw")).toBeUndefined();
+  });
+});
+
+describe("isTaiwanListed", () => {
+  it("recognises both TWSE (.TW) and TPEx (.TWO) listings", () => {
+    expect(isTaiwanListed("0050.TW")).toBe(true);
+    expect(isTaiwanListed("2330.tw")).toBe(true);
+    // Every Taiwanese bond ETF lists on TPEx. ".TWO" does not end with ".TW",
+    // so a naive endsWith(".TW") check calls these US-listed and prices them
+    // in the wrong currency against the wrong benchmark.
+    expect(isTaiwanListed("00679B.TWO")).toBe(true);
+    expect(isTaiwanListed("00937b.two")).toBe(true);
+  });
+
+  it("does not claim US symbols are Taiwan-listed", () => {
+    expect(isTaiwanListed("TLT")).toBe(false);
+    expect(isTaiwanListed("SPY")).toBe(false);
+  });
+
+  it("treats a TPEx symbol's missing split block as unknown too", () => {
+    expect(splitsUnreported("00679B.TWO")).toBeUndefined();
+  });
+});
+
+describe("incomeProfile", () => {
+  const prices: PricePoint[] = [
+    { date: "2025-09-01", close: 100 },
+    { date: "2026-08-31", close: 100 },
+  ];
+
+  it("yields trailing-12-month distributions over the latest close, and counts them", () => {
+    // Sept 2025 through Aug 2026 — twelve payments inside the trailing year.
+    const divs = Array.from({ length: 12 }, (_, i) => {
+      const month = ((8 + i) % 12) + 1;
+      const year = 8 + i < 12 ? 2025 : 2026;
+      return { date: `${year}-${String(month).padStart(2, "0")}-15`, amount: 0.5 };
+    });
+    // Twelve payments of 0.5 on a 100 close = 6% and monthly.
+    const { estimatedYieldPct, distributionsPerYear } = incomeProfile(prices, divs);
+    expect(estimatedYieldPct).toBeCloseTo(6, 6);
+    expect(distributionsPerYear).toBe(12);
+  });
+
+  it("ignores distributions older than the trailing year", () => {
+    const { estimatedYieldPct, distributionsPerYear } = incomeProfile(prices, [
+      { date: "2020-01-15", amount: 99 }, // long before the window
+      { date: "2026-03-15", amount: 2 },
+      { date: "2026-06-15", amount: 2 },
+    ]);
+    expect(estimatedYieldPct).toBeCloseTo(4, 6);
+    expect(distributionsPerYear).toBe(2);
+  });
+
+  it("reports null rather than 0% when the source gives no distributions", () => {
+    expect(incomeProfile(prices, undefined)).toEqual({
+      estimatedYieldPct: null,
+      distributionsPerYear: null,
+    });
+    expect(incomeProfile(prices, [])).toEqual({
+      estimatedYieldPct: null,
+      distributionsPerYear: null,
+    });
+    // A fund whose only payouts predate the window is "no data for this year",
+    // not "pays nothing" — still null, never a confident zero.
+    expect(incomeProfile(prices, [{ date: "2019-01-15", amount: 3 }]).estimatedYieldPct).toBeNull();
+  });
+});
+
+describe("symbolCandidates", () => {
+  it("resolves a bare Taiwanese ticker against both exchanges", () => {
+    // Nobody in Taiwan types the suffix, and which one is right depends on
+    // where the symbol listed — bond ETFs are all on TPEx (.TWO).
+    expect(symbolCandidates("0050")).toEqual(["0050.TW", "0050.TWO"]);
+    expect(symbolCandidates("00679B")).toEqual(["00679B.TW", "00679B.TWO"]);
+    expect(symbolCandidates("00631l")).toEqual(["00631L.TW", "00631L.TWO"]);
+  });
+
+  it("leaves already-suffixed and US-shaped symbols to be fetched as typed", () => {
+    expect(symbolCandidates("0050.TW")).toEqual([]);
+    expect(symbolCandidates("00679B.TWO")).toEqual([]);
+    expect(symbolCandidates("TLT")).toEqual([]);
+    expect(symbolCandidates("BRK.B")).toEqual([]);
   });
 });

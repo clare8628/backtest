@@ -1,4 +1,4 @@
-import { BacktestMetrics, IndexedPoint, PricePoint, Recommendation, SymbolSeries } from "./types";
+import { BacktestMetrics, DividendEvent, IndexedPoint, PricePoint, Recommendation, SymbolSeries } from "./types";
 import { getManagementFee } from "./symbolCatalog";
 
 const TRADING_DAYS_PER_YEAR = 252;
@@ -488,6 +488,49 @@ export function trimToWindow(
   window: { start: string; end: string }
 ): PricePoint[] {
   return prices.filter((p) => p.date >= window.start && p.date <= window.end);
+}
+
+export interface IncomeProfile {
+  estimatedYieldPct: number | null;
+  distributionsPerYear: number | null;
+}
+
+/**
+ * Trailing-twelve-month income, for judging a fund as a source of retirement
+ * cash flow rather than capital gain.
+ *
+ * `estimatedYieldPct` is the distributions actually paid over the last year as
+ * a percentage of the latest close — a backward-looking *realised* yield, not
+ * a forecast. Bond funds' payouts move with rates and holdings, so last year's
+ * figure is evidence about the future, not a promise of it.
+ *
+ * `distributionsPerYear` is simply how many of those payments there were, which
+ * is what makes 12 (monthly) versus 4 (quarterly) visible — the thing that
+ * decides whether the income lands as a monthly paycheque or in lumps.
+ *
+ * Both are null when the source reports no distributions at all, so a fund that
+ * genuinely pays nothing is distinguishable from one we have no data for only
+ * by its catalog class — deliberately not a 0%, which would read as "pays
+ * nothing" for a fund we simply couldn't read.
+ */
+export function incomeProfile(
+  prices: PricePoint[],
+  dividends: DividendEvent[] | undefined
+): IncomeProfile {
+  if (!dividends || dividends.length === 0 || prices.length === 0) {
+    return { estimatedYieldPct: null, distributionsPerYear: null };
+  }
+  const lastDate = prices[prices.length - 1].date;
+  const windowStart = new Date(Date.parse(lastDate) - MS_PER_YEAR).toISOString().slice(0, 10);
+  const recent = dividends.filter((d) => d.date > windowStart && d.date <= lastDate);
+  if (recent.length === 0) return { estimatedYieldPct: null, distributionsPerYear: null };
+
+  const paid = recent.reduce((sum, d) => sum + d.amount, 0);
+  const latestClose = prices[prices.length - 1].close;
+  return {
+    estimatedYieldPct: latestClose > 0 ? (paid / latestClose) * 100 : null,
+    distributionsPerYear: recent.length,
+  };
 }
 
 /** Closing price on the last trading day of each calendar month, in order. */

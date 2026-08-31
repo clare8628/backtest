@@ -3,7 +3,7 @@
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { t, Lang } from "@/lib/i18n";
 import { searchCatalog } from "@/lib/symbolCatalog";
-import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries } from "@/lib/types";
+import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries, Currency } from "@/lib/types";
 import { loadGroups, upsertGroup, deleteGroup, newGroupId } from "@/lib/storage";
 import PerformanceChart from "@/components/PerformanceChart";
 
@@ -43,6 +43,34 @@ function Note({ title, body }: { title: string; body: string }) {
 const DASH = "—";
 const pct = (v: number | null | undefined) => (v === undefined || v === null ? DASH : `${v}%`);
 const num = (v: number | null | undefined) => (v === undefined || v === null ? DASH : String(v));
+const text = (v: string | null | undefined) => (v ? v : DASH);
+
+/** Net assets in the fund's own currency, scaled to the unit that market
+ *  actually quotes: 億 for TWD (a NT$167,000,000,000 fund is "1,674 億"), and
+ *  B/M for USD. Showing raw digits for either makes them unreadable. */
+function formatFundSize(value: number | null | undefined, currency: Currency | undefined): string {
+  if (value === undefined || value === null) return DASH;
+  if (currency === "TWD") {
+    return `${(value / 1e8).toLocaleString(undefined, { maximumFractionDigits: 0 })} 億 TWD`;
+  }
+  if (value >= 1e9) return `$${(value / 1e9).toFixed(1)}B`;
+  if (value >= 1e6) return `$${(value / 1e6).toFixed(0)}M`;
+  return `$${value.toLocaleString()}`;
+}
+
+/** Turn a raw count of payments per year into the label an investor thinks in.
+ *  Kept slightly loose because a fund's first or last year in the window can
+ *  land 11 or 13 payments on a genuinely monthly schedule. */
+function distributionLabel(count: number | null | undefined, T: Dict): string {
+  if (count === undefined || count === null) return DASH;
+  const name =
+    count >= 11 ? T.freqMonthly
+    : count >= 3 && count <= 5 ? T.freqQuarterly
+    : count === 2 ? T.freqSemiannual
+    : count === 1 ? T.freqAnnual
+    : T.freqOther;
+  return `${name}（${count} ${T.perYear}）`;
+}
 
 type Dict = ReturnType<typeof t>;
 interface MetricRow {
@@ -122,10 +150,27 @@ function metricSections(T: Dict): { title: string; rows: MetricRow[] }[] {
       ],
     },
     {
+      title: T.groupIncome,
+      rows: [
+        { label: T.assetClass, value: (m) => text(m.assetClass) },
+        { label: T.creditRating, value: (m) => text(m.creditRating) },
+        { label: T.fundSize, value: (m) => formatFundSize(m.fundSize, m.fundSizeCurrency) },
+        {
+          label: T.estimatedYield,
+          value: (m) => pct(m.estimatedYieldPct),
+          color: (m) => (m.estimatedYieldPct ? "var(--positive)" : undefined),
+        },
+        { label: T.distributionFreq, value: (m) => distributionLabel(m.distributionsPerYear, T) },
+      ],
+    },
+    {
       title: T.groupInfo,
       rows: [
         { label: T.maxBacktestYears, value: (m) => num(m.maxBacktestYears) },
-        { label: T.fee, value: (m) => pct(m.managementFee) },
+        {
+          label: T.fee,
+          value: (m) => (m.managementFeeKnown === false ? DASH : pct(m.managementFee)),
+        },
         { label: T.splitCount, value: (m) => num(m.splitCount) },
       ],
     },
@@ -615,6 +660,10 @@ export default function Home() {
                         </p>
                         <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
                           {T.splitNote}
+                        </p>
+                        <Note title={T.incomeNote} body={T.incomeNoteText} />
+                        <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
+                          {T.twoSuffixNote}
                         </p>
                       </div>
                     )}

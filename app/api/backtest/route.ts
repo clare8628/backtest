@@ -9,9 +9,11 @@ import {
   downsamplePrices,
   fxLookup,
   trendStrength,
+  incomeProfile,
 } from "@/lib/backtest";
-import { fetchMultiple, fetchDailyPrices } from "@/lib/marketData";
+import { fetchMultiple, fetchDailyPrices, fetchFundSize, isTaiwanListed } from "@/lib/marketData";
 import { Currency, ChartSeries } from "@/lib/types";
+import { getAssetClass, getCreditRating, hasKnownManagementFee } from "@/lib/symbolCatalog";
 
 // A Taiwan-listed fund's daily correlation to the US market isn't a meaningful
 // "Beta" for it, so each symbol is measured against its own market's benchmark:
@@ -36,10 +38,6 @@ const USD_TWD_FX_SYMBOL = "TWD=X";
 // beta, the chart itself) down to monthly resolution, not just the ceiling
 // calculation that can tolerate it.
 const CEILING_FETCH_YEARS = 30;
-
-function isTaiwanListed(symbol: string): boolean {
-  return symbol.toUpperCase().endsWith(".TW");
-}
 
 function benchmarkFor(symbol: string): string {
   return isTaiwanListed(symbol) ? TW_MARKET_BENCHMARK_SYMBOL : US_MARKET_BENCHMARK_SYMBOL;
@@ -128,10 +126,21 @@ export async function POST(req: NextRequest) {
       })
     );
 
+    // Net assets live on a separate, rate-limited Yahoo endpoint, so fetch all
+    // of them together and let any individual failure fall through as null
+    // rather than holding up (or failing) the whole backtest.
+    const fundSizes = new Map<string, number | null>();
+    await Promise.all(
+      alignedResults.map(async (s) => {
+        fundSizes.set(s.symbol, await fetchFundSize(s.symbol));
+      })
+    );
+
     const metrics = alignedResults.map((s) => {
       const benchmarkSymbol = benchmarkFor(s.symbol);
       const m = computeMetrics(s, startValue, benchmarkReturns.get(benchmarkSymbol) ?? []);
       const trend = trendStrength(s.prices);
+      const income = incomeProfile(s.prices, s.dividends);
       // Splits within the aligned backtest window specifically — s.splits
       // itself still spans the full requested rangeYears fetch, untrimmed.
       const splitCount = s.splits
@@ -146,6 +155,14 @@ export async function POST(req: NextRequest) {
         positiveYearPct: trend.positiveYearPct === null ? null : round2(trend.positiveYearPct),
         gainPainRatio: trend.gainPainRatio === null ? null : round2(trend.gainPainRatio),
         splitCount,
+        assetClass: getAssetClass(s.symbol),
+        creditRating: getCreditRating(s.symbol),
+        fundSize: fundSizes.get(s.symbol) ?? null,
+        fundSizeCurrency: nativeCurrency(s.symbol),
+        estimatedYieldPct:
+          income.estimatedYieldPct === null ? null : round2(income.estimatedYieldPct),
+        distributionsPerYear: income.distributionsPerYear,
+        managementFeeKnown: hasKnownManagementFee(s.symbol),
       };
     });
     const recommendations = recommend(metrics);

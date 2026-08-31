@@ -3,6 +3,11 @@ export interface PricePoint {
   close: number;
 }
 
+export interface DividendEvent {
+  date: string; // YYYY-MM-DD (ex-dividend date)
+  amount: number; // per share, in the symbol's native currency
+}
+
 export interface SplitEvent {
   date: string; // YYYY-MM-DD
   ratio: string; // e.g. "2:1" for a 2-for-1 forward split
@@ -16,6 +21,9 @@ export interface SymbolSeries {
    *  undefined (not []) when the source (e.g. the Stooq fallback) doesn't
    *  report split history, so "no splits" can be told apart from "unknown". */
   splits?: SplitEvent[];
+  /** Cash distributions within the fetched range, from the source's dividend
+   *  events — undefined when the source doesn't report them at all. */
+  dividends?: DividendEvent[];
 }
 
 export interface BacktestMetrics {
@@ -71,6 +79,22 @@ export interface BacktestMetrics {
    *  even after a huge cumulative return, since Yahoo's close price is
    *  already split-adjusted and unaffected either way. */
   splitCount?: number;
+  /** Income profile, for judging a holding as retirement cash flow rather than
+   *  capital gain. assetClass/creditRating are curated (see symbolCatalog);
+   *  fundSize is read live from the data source in fundSizeCurrency, the
+   *  fund's own trading currency; the yield and distribution count are
+   *  computed from the distributions actually paid over the trailing year.
+   *  Every one is optional/null rather than defaulted, so "we have no figure"
+   *  never renders as a confident zero. */
+  assetClass?: string;
+  creditRating?: string;
+  fundSize?: number | null;
+  fundSizeCurrency?: Currency;
+  estimatedYieldPct?: number | null;
+  distributionsPerYear?: number | null;
+  /** False when managementFee is the 0% fallback rather than a published
+   *  figure — the UI shows a dash instead of claiming the fund is free. */
+  managementFeeKnown?: boolean;
 }
 
 export interface Recommendation {

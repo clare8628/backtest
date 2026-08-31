@@ -1,4 +1,4 @@
-import { PricePoint, SplitEvent, SymbolSeries } from "./types";
+import { DividendEvent, PricePoint, SplitEvent, SymbolSeries } from "./types";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -12,6 +12,13 @@ export async function fetchDailyPrices(
   symbol: string,
   rangeYears = 5
 ): Promise<SymbolSeries> {
+  for (const candidate of symbolCandidates(symbol)) {
+    try {
+      return await fetchFromYahoo(candidate, rangeYears);
+    } catch {
+      // Try the next suffix before falling through to the Stooq fallback.
+    }
+  }
   try {
     return await fetchFromYahoo(symbol, rangeYears);
   } catch (yahooError) {
@@ -25,11 +32,28 @@ export async function fetchDailyPrices(
   }
 }
 
+/**
+ * Market suffixes worth trying for a bare Taiwanese ticker before giving up.
+ *
+ * Taiwanese tickers are numeric, sometimes with a class letter (0050, 00679B,
+ * 00631L), and nobody in Taiwan writes the exchange suffix — but the data
+ * source demands one, and *which* one depends on where the symbol listed:
+ * `.TW` for the TWSE, `.TWO` for TPEx, where every Taiwanese bond ETF lives.
+ * A bare numeric ticker is never a US symbol, so resolving it against both is
+ * unambiguous. Anything already carrying a suffix, or shaped like a US ticker,
+ * yields nothing here and is fetched as typed.
+ */
+export function symbolCandidates(symbol: string): string[] {
+  const s = symbol.trim().toUpperCase();
+  if (s.includes(".") || !/^\d{4,6}[A-Z]?$/.test(s)) return [];
+  return [`${s}.TW`, `${s}.TWO`];
+}
+
 async function fetchFromYahoo(symbol: string, rangeYears: number): Promise<SymbolSeries> {
   const range = yearsToYahooRange(rangeYears);
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
     symbol
-  )}?range=${range}&interval=1d&events=split`;
+  )}?range=${range}&interval=1d&events=div%2Csplit`;
 
   const res = await fetch(url, {
     headers: {
@@ -91,7 +115,38 @@ async function fetchFromYahoo(symbol: string, rangeYears: number): Promise<Symbo
         .sort((a, b) => (a.date < b.date ? -1 : 1))
     : splitsUnreported(symbol);
 
-  return { symbol: symbol.toUpperCase(), prices: finalPrices, splits };
+  // Cash distributions, for the income metrics. Unlike splits these need no
+  // market-specific caveat: the source reports them for US and Taiwan funds
+  // alike (a Taiwan bond ETF paying monthly returns twelve events a year).
+  const rawDividends = result?.events?.dividends as
+    | Record<string, { date: number; amount?: number }>
+    | undefined;
+  const dividends: DividendEvent[] | undefined = rawDividends
+    ? Object.values(rawDividends)
+        .filter((d) => typeof d.amount === "number")
+        .map((d) => ({
+          date: new Date(d.date * 1000).toISOString().slice(0, 10),
+          amount: d.amount as number,
+        }))
+        .sort((a, b) => (a.date < b.date ? -1 : 1))
+    : undefined;
+
+  return { symbol: symbol.toUpperCase(), prices: finalPrices, splits, dividends };
+}
+
+/**
+ * Whether a symbol trades in Taiwan.
+ *
+ * Two suffixes, not one: TWSE-listed symbols end in `.TW`, but Taiwan's bond
+ * ETFs are all listed on TPEx and end in `.TWO` instead — a `.TW` lookup for
+ * any of them returns nothing at all. Note that `.TWO` does *not* end with
+ * `.TW`, so a naive endsWith(".TW") check silently classifies every Taiwanese
+ * bond ETF as US-listed and prices it in the wrong currency against the wrong
+ * benchmark.
+ */
+export function isTaiwanListed(symbol: string): boolean {
+  const s = symbol.trim().toUpperCase();
+  return s.endsWith(".TW") || s.endsWith(".TWO");
 }
 
 /**
@@ -114,7 +169,59 @@ async function fetchFromYahoo(symbol: string, rangeYears: number): Promise<Symbo
  * source, so this only governs whether the UI can show a count or a dash.
  */
 export function splitsUnreported(symbol: string): SplitEvent[] | undefined {
-  return symbol.toUpperCase().endsWith(".TW") ? undefined : [];
+  return isTaiwanListed(symbol) ? undefined : [];
+}
+
+// --- Fund size -------------------------------------------------------------
+//
+// Net assets come from a different Yahoo endpoint than the price chart, and
+// that one refuses anonymous callers ("Invalid Crumb"). It needs a session
+// cookie plus a matching crumb token, so we fetch that pair once and reuse it.
+// Everything here is best-effort: any failure yields no figure and the UI
+// shows a dash, which is the honest outcome for a number we could not read.
+
+const CRUMB_TTL_MS = 30 * 60 * 1000;
+let crumbSession: { cookie: string; crumb: string; at: number } | null = null;
+
+async function yahooCrumbSession(): Promise<{ cookie: string; crumb: string } | null> {
+  if (crumbSession && Date.now() - crumbSession.at < CRUMB_TTL_MS) return crumbSession;
+  try {
+    const seed = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": BROWSER_UA } });
+    const cookie = (seed.headers.get("set-cookie") ?? "").split(";")[0];
+    if (!cookie) return null;
+    const res = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
+      headers: { "User-Agent": BROWSER_UA, Cookie: cookie },
+    });
+    const crumb = (await res.text()).trim();
+    if (!crumb || crumb.includes("<")) return null;
+    crumbSession = { cookie, crumb, at: Date.now() };
+    return crumbSession;
+  } catch {
+    return null;
+  }
+}
+
+/** Net assets under management, in the fund's own trading currency. Null for
+ *  anything the source has no figure for (individual stocks, or a failed
+ *  fetch) — never estimated from price or volume. */
+export async function fetchFundSize(symbol: string): Promise<number | null> {
+  const session = await yahooCrumbSession();
+  if (!session) return null;
+  try {
+    const url =
+      `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}` +
+      `?modules=defaultKeyStatistics&crumb=${encodeURIComponent(session.crumb)}`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": BROWSER_UA, Cookie: session.cookie },
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const raw = data?.quoteSummary?.result?.[0]?.defaultKeyStatistics?.totalAssets?.raw;
+    return typeof raw === "number" && raw > 0 ? raw : null;
+  } catch {
+    return null;
+  }
 }
 
 function yearsToYahooRange(years: number): string {
