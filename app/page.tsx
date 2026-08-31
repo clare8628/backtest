@@ -119,17 +119,6 @@ function metricSections(T: Dict): { title: string; rows: MetricRow[] }[] {
           value: (m) => num(m.gainPainRatio),
           color: (m) => trendColor(m.gainPainRatio, 1),
         },
-        {
-          label: T.swingUpAvgPct,
-          value: (m) =>
-            m.swingUpAvgPct === undefined || m.swingUpAvgPct === null ? DASH : `+${m.swingUpAvgPct}%`,
-        },
-        {
-          label: T.swingDownAvgPct,
-          value: (m) =>
-            m.swingDownAvgPct === undefined || m.swingDownAvgPct === null ? DASH : `-${m.swingDownAvgPct}%`,
-          color: () => "var(--negative)",
-        },
       ],
     },
     {
@@ -206,7 +195,6 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [rangeYears, setRangeYears] = useState(5);
   const [startValue, setStartValue] = useState(1000);
-  const [swingThresholdPct, setSwingThresholdPct] = useState(10);
 
   const [results, setResults] = useState<Record<string, BacktestResult>>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -253,7 +241,6 @@ export default function Home() {
           symbols: group.symbols,
           rangeYears: group.rangeYears,
           startValue: group.startValue ?? 1000,
-          swingThresholdPct: group.swingThresholdPct ?? 10,
         }),
       });
       const data = await res.json();
@@ -288,14 +275,12 @@ export default function Home() {
       createdAt: new Date().toISOString(),
       rangeYears,
       startValue,
-      swingThresholdPct,
     };
     upsertGroup(group).then((updated) => {
       setGroups(updated);
       setDraftTitle("");
       setDraftSymbols([]);
       setStartValue(1000);
-      setSwingThresholdPct(10);
       runBacktest(group);
     });
   }
@@ -353,11 +338,6 @@ export default function Home() {
     updateGroup(updated, { rerun: true, debounce: true });
   }
 
-  function changeGroupSwingThreshold(group: ComparisonGroup, pct: number) {
-    const updated = { ...group, swingThresholdPct: Math.max(0.1, pct) };
-    updateGroup(updated, { rerun: true, debounce: true });
-  }
-
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
       <header>
@@ -390,7 +370,7 @@ export default function Home() {
           <span className="eyebrow">1. {T.newComparison}</span>
           <h2 className="font-display text-2xl">{T.newComparison}</h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input
               value={draftTitle}
               onChange={(e) => setDraftTitle(e.target.value)}
@@ -399,13 +379,6 @@ export default function Home() {
               style={{ borderColor: "var(--line)" }}
             />
             <NumberField label={T.startValue} value={startValue} onCommit={setStartValue} min={1} step={100} />
-            <NumberField
-              label={T.swingThreshold}
-              value={swingThresholdPct}
-              onCommit={setSwingThresholdPct}
-              min={0.1}
-              step={1}
-            />
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2">
@@ -578,7 +551,7 @@ export default function Home() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
                   <RangeSlider
                     label={T.rangeYears}
                     value={g.rangeYears}
@@ -591,14 +564,6 @@ export default function Home() {
                     onCommit={(v) => changeGroupStartValue(g, v)}
                     min={1}
                     step={100}
-                    className="w-full border rounded-lg px-3 py-2 bg-white/70 text-sm"
-                  />
-                  <NumberField
-                    label={T.swingThreshold}
-                    value={g.swingThresholdPct ?? 10}
-                    onCommit={(v) => changeGroupSwingThreshold(g, v)}
-                    min={0.1}
-                    step={1}
                     className="w-full border rounded-lg px-3 py-2 bg-white/70 text-sm"
                   />
                 </div>
@@ -647,6 +612,9 @@ export default function Home() {
                         <Note title={T.trendNote} body={T.trendNoteText} />
                         <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
                           {T.resolutionNote}
+                        </p>
+                        <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
+                          {T.splitNote}
                         </p>
                       </div>
                     )}

@@ -490,84 +490,6 @@ export function trimToWindow(
   return prices.filter((p) => p.date >= window.start && p.date <= window.end);
 }
 
-/**
- * Counts completed up/down price swings of at least `thresholdPct` using a
- * zigzag-style reversal rule: track the running extreme in the current
- * direction, and only register a completed swing (incrementing the count for
- * the leg that just ended) once price reverses by at least the threshold from
- * that extreme. This ignores day-to-day noise below the threshold and only
- * counts a leg once it's actually reversed — an ongoing move at the end of
- * the window that hasn't yet reversed is not counted.
- *
- * Only each direction's *average leg size* is reported (% move from that leg's
- * starting pivot to its ending extreme), not the leg counts: completed legs
- * strictly alternate direction, so up/down counts can never differ by more
- * than 1 regardless of the asset, the threshold, or whether it trended up or
- * down overall — they carry no directional information at all. What actually
- * drives long-run compounding despite a perfectly even leg count is
- * *asymmetric magnitude* — up legs averaging bigger than down legs (or the
- * reverse) — which only the average-size figures surface. See trendStrength()
- * for the threshold-free measures of the same question.
- */
-export function countSwings(
-  prices: PricePoint[],
-  thresholdPct: number
-): { up: number; down: number; avgUpPct: number | null; avgDownPct: number | null } {
-  if (prices.length < 2 || thresholdPct <= 0) {
-    return { up: 0, down: 0, avgUpPct: null, avgDownPct: null };
-  }
-  const threshold = thresholdPct / 100;
-  let up = 0;
-  let down = 0;
-  let upSumPct = 0;
-  let downSumPct = 0;
-  let direction: 1 | -1 | 0 = 0; // 0 = initial direction not yet confirmed
-  let legStart = prices[0].close; // pivot price where the current leg began
-  let extreme = prices[0].close; // running high (direction 1) or low (direction -1) of the current leg
-
-  for (let i = 1; i < prices.length; i++) {
-    const price = prices[i].close;
-    if (direction === 0) {
-      if (price >= extreme * (1 + threshold)) {
-        direction = 1;
-        extreme = price;
-      } else if (price <= extreme * (1 - threshold)) {
-        direction = -1;
-        extreme = price;
-      }
-      continue;
-    }
-    if (direction === 1) {
-      if (price > extreme) {
-        extreme = price;
-      } else if (price <= extreme * (1 - threshold)) {
-        up++;
-        upSumPct += ((extreme - legStart) / legStart) * 100;
-        direction = -1;
-        legStart = extreme;
-        extreme = price;
-      }
-    } else {
-      if (price < extreme) {
-        extreme = price;
-      } else if (price >= extreme * (1 + threshold)) {
-        down++;
-        downSumPct += ((legStart - extreme) / legStart) * 100;
-        direction = 1;
-        legStart = extreme;
-        extreme = price;
-      }
-    }
-  }
-
-  return {
-    up,
-    down,
-    avgUpPct: up > 0 ? upSumPct / up : null,
-    avgDownPct: down > 0 ? downSumPct / down : null,
-  };
-}
-
 /** Closing price on the last trading day of each calendar month, in order. */
 export function monthEndCloses(prices: PricePoint[]): number[] {
   const out: number[] = [];
@@ -593,9 +515,12 @@ const MONTHS_PER_YEAR = 12;
 const MIN_ROLLING_YEAR_WINDOWS = 12;
 
 /**
- * Measures of *directional* trend strength — the thing swing counts
- * structurally cannot show (see countSwings). All four are threshold-free, so
- * unlike the swing figures they don't move when the user retunes a knob.
+ * Measures of *directional* trend strength. All four are threshold-free —
+ * nothing here has a knob to tune, so the same window always scores the same
+ * way. (These replaced a zigzag swing-count/size feature, which needed a
+ * reversal threshold and still couldn't show direction: completed legs
+ * strictly alternate, so up and down counts never differ by more than 1 no
+ * matter how strongly the asset trends.)
  *
  * - `trendR2`: R² (0–100) of an ordinary least-squares fit of ln(price) against
  *   time, signed by the fitted slope. |R²| says how tightly the price hugs a
@@ -610,9 +535,9 @@ const MIN_ROLLING_YEAR_WINDOWS = 12;
  *   window that ended in profit — "if I'd bought on a random day and held a
  *   year, how often would I be up?".
  * - `gainPainRatio`: sum of positive monthly returns over the absolute sum of
- *   negative ones. This is the magnitude-weighted answer to the swing-count
- *   symmetry: >1 means up months outweigh down months in aggregate size even
- *   when there are just as many of each.
+ *   negative ones. The magnitude-weighted view of direction: >1 means up
+ *   months outweigh down months in aggregate size even when there are just as
+ *   many of each.
  *
  * The last three all run off month-end closes rather than the raw series on
  * purpose. Yahoo silently coarsens long ranges from daily to monthly bars (see

@@ -8,7 +8,6 @@ import {
   trimToWindow,
   downsamplePrices,
   fxLookup,
-  countSwings,
   trendStrength,
 } from "@/lib/backtest";
 import { fetchMultiple, fetchDailyPrices } from "@/lib/marketData";
@@ -61,10 +60,6 @@ export async function POST(req: NextRequest) {
     const rangeYears: number = typeof body?.rangeYears === "number" ? body.rangeYears : 5;
     const startValue: number =
       typeof body?.startValue === "number" && body.startValue > 0 ? body.startValue : 1000;
-    const swingThresholdPct: number =
-      typeof body?.swingThresholdPct === "number" && body.swingThresholdPct > 0
-        ? body.swingThresholdPct
-        : 10;
 
     if (symbols.length === 0) {
       return NextResponse.json({ error: "symbols is required" }, { status: 400 });
@@ -136,7 +131,6 @@ export async function POST(req: NextRequest) {
     const metrics = alignedResults.map((s) => {
       const benchmarkSymbol = benchmarkFor(s.symbol);
       const m = computeMetrics(s, startValue, benchmarkReturns.get(benchmarkSymbol) ?? []);
-      const swings = countSwings(s.prices, swingThresholdPct);
       const trend = trendStrength(s.prices);
       // Splits within the aligned backtest window specifically — s.splits
       // itself still spans the full requested rangeYears fetch, untrimmed.
@@ -147,8 +141,6 @@ export async function POST(req: NextRequest) {
         ...m,
         benchmarkSymbol,
         maxBacktestYears: round2(maxBacktestYears[s.symbol] ?? 0),
-        swingUpAvgPct: swings.avgUpPct === null ? null : round2(swings.avgUpPct),
-        swingDownAvgPct: swings.avgDownPct === null ? null : round2(swings.avgDownPct),
         trendR2: trend.trendR2 === null ? null : round2(trend.trendR2),
         newHighMonthPct: trend.newHighMonthPct === null ? null : round2(trend.newHighMonthPct),
         positiveYearPct: trend.positiveYearPct === null ? null : round2(trend.positiveYearPct),

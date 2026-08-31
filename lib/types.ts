@@ -35,18 +35,8 @@ export interface BacktestMetrics {
    *  listing date to today), independent of the currently selected range —
    *  a fund listed 2 years ago tops out at ~2 years regardless of the slider. */
   maxBacktestYears?: number;
-  /** Average size (%) of each direction's completed swings of at least
-   *  swingThresholdPct — null when that direction had zero completed legs.
-   *  Swing *counts* are deliberately not reported: completed legs strictly
-   *  alternate direction, so up/down counts can never differ by more than 1
-   *  no matter how strongly the asset trends. Asymmetry in these averages
-   *  (up legs bigger than down legs) is what drives compounding despite a
-   *  perfectly even leg count. */
-  swingUpAvgPct?: number | null;
-  swingDownAvgPct?: number | null;
-  /** Direction-of-trend measures that swing counts structurally can't give.
-   *  All threshold-free, so they don't shift when swingThresholdPct is
-   *  retuned. See trendStrength() in backtest.ts for the full definitions.
+  /** Direction-of-trend measures. All threshold-free — nothing here has a knob
+   *  to tune. See trendStrength() in backtest.ts for the full definitions.
    *  - trendR2: R² (0–100) of ln(price) regressed on time, signed by slope —
    *    how tightly the price tracks one steady exponential path, and which way.
    *  - newHighMonthPct: % of months closing at a new high for the window.
@@ -98,7 +88,6 @@ export interface ComparisonGroup {
   createdAt: string;
   rangeYears: number;
   startValue?: number; // 起點金額，預設 1000
-  swingThresholdPct?: number; // 波段反轉門檻(%)，預設 10
 }
 
 export interface IndexedPoint {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, countSwings, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev } from "@/lib/backtest";
-import { parseStooqCsv, toStooqSymbol } from "@/lib/marketData";
+import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev } from "@/lib/backtest";
+import { parseStooqCsv, toStooqSymbol, splitsUnreported } from "@/lib/marketData";
 import { PricePoint, BacktestMetrics } from "@/lib/types";
 
 function series(closes: number[]): PricePoint[] {
@@ -298,58 +298,6 @@ describe("normalizeToIndex", () => {
   });
 });
 
-describe("countSwings", () => {
-  it("counts one completed up-swing once price reverses down past the threshold, sized from its start pivot to its peak", () => {
-    const { up, down, avgUpPct, avgDownPct } = countSwings(series([100, 105, 110, 120, 130, 100, 90]), 10);
-    expect(up).toBe(1);
-    expect(down).toBe(0);
-    expect(avgUpPct).toBeCloseTo(30, 5); // 100 -> 130
-    expect(avgDownPct).toBeNull();
-  });
-
-  it("counts one completed down-swing once price reverses up past the threshold, sized from its start pivot to its trough", () => {
-    const { up, down, avgUpPct, avgDownPct } = countSwings(series([100, 90, 80, 70, 85, 100, 115]), 10);
-    expect(down).toBe(1);
-    expect(up).toBe(0);
-    expect(avgDownPct).toBeCloseTo(30, 5); // 100 -> 70
-    expect(avgUpPct).toBeNull();
-  });
-
-  it("does not count an in-progress leg that hasn't reversed by the threshold yet", () => {
-    // Ends mid-uptrend from the down-swing's extreme (115 is only +64% off the
-    // 70 low but never reverses back down), so that leg stays uncounted.
-    const { up, down } = countSwings(series([100, 90, 80, 70, 85, 100, 115]), 10);
-    expect(up + down).toBe(1);
-  });
-
-  it("ignores moves smaller than the threshold as noise", () => {
-    const { up, down } = countSwings(series([100, 105, 102, 108, 103, 109]), 10);
-    expect(up).toBe(0);
-    expect(down).toBe(0);
-  });
-
-  it("averages leg size across multiple completed swings in the same direction", () => {
-    // Up legs: 100->120 (+20%), then (after a down leg) 100->140 (+40%). Average 30%.
-    const { up, avgUpPct } = countSwings(series([100, 120, 100, 140, 110]), 10);
-    expect(up).toBe(2);
-    expect(avgUpPct).toBeCloseTo(30, 5);
-  });
-
-  it("returns zero swings and null averages for a non-positive threshold or too few points", () => {
-    expect(countSwings(series([100, 200]), 0)).toEqual({ up: 0, down: 0, avgUpPct: null, avgDownPct: null });
-    expect(countSwings(series([100]), 10)).toEqual({ up: 0, down: 0, avgUpPct: null, avgDownPct: null });
-  });
-
-  it("can never separate an uptrend from a downtrend by leg count alone", () => {
-    // The premise behind reporting only the averages: legs strictly alternate,
-    // so a relentless riser and a relentless faller both come out ~even.
-    const riser = countSwings(series([100, 80, 130, 105, 170, 140, 220]), 10);
-    const faller = countSwings(series([100, 130, 80, 105, 60, 80, 45]), 10);
-    expect(Math.abs(riser.up - riser.down)).toBeLessThanOrEqual(1);
-    expect(Math.abs(faller.up - faller.down)).toBeLessThanOrEqual(1);
-  });
-});
-
 describe("periodsPerYear", () => {
   it("measures daily bars as ~252 and monthly bars as ~12", () => {
     const daily: PricePoint[] = [];
@@ -517,8 +465,8 @@ describe("trendStrength", () => {
   });
 
   it("separates up from down by magnitude even when up and down months are equal in number", () => {
-    // Six +20% months alternating with six -10% months — the case swing counts
-    // call a tie. Gain/pain = (6 x 0.20) / (6 x 0.10) = 2.
+    // Six +20% months alternating with six -10% months — equal counts each way,
+    // so only magnitude separates them. Gain/pain = (6 x 0.20) / (6 x 0.10) = 2.
     const closes = [100];
     for (let i = 0; i < 12; i++) {
       closes.push(closes[closes.length - 1] * (i % 2 === 0 ? 1.2 : 0.9));
@@ -537,5 +485,21 @@ describe("trendStrength", () => {
       positiveYearPct: null,
       gainPainRatio: null,
     });
+  });
+});
+
+describe("splitsUnreported", () => {
+  // Yahoo omits the split-events block both for a symbol that never split and
+  // for one it doesn't track, so the market has to decide which it means.
+  it("treats a missing block as a real zero for US-listed symbols", () => {
+    expect(splitsUnreported("SPY")).toEqual([]);
+    expect(splitsUnreported("GLD")).toEqual([]);
+  });
+
+  it("treats a missing block as unknown for Taiwan-listed symbols", () => {
+    // 0050.TW's June 2025 1-into-4 split is absent from Yahoo's events even
+    // though its prices are adjusted for it, so a "0" here would be a lie.
+    expect(splitsUnreported("0050.TW")).toBeUndefined();
+    expect(splitsUnreported("006208.tw")).toBeUndefined();
   });
 });

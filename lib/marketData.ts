@@ -81,7 +81,7 @@ async function fetchFromYahoo(symbol: string, rangeYears: number): Promise<Symbo
   const rawSplits = result?.events?.splits as
     | Record<string, { date: number; numerator?: number; denominator?: number; splitRatio?: string }>
     | undefined;
-  const splits: SplitEvent[] = rawSplits
+  const splits: SplitEvent[] | undefined = rawSplits
     ? Object.values(rawSplits)
         .map((s) => ({
           date: new Date(s.date * 1000).toISOString().slice(0, 10),
@@ -89,9 +89,32 @@ async function fetchFromYahoo(symbol: string, rangeYears: number): Promise<Symbo
         }))
         .filter((s) => usedCutoff === null || new Date(s.date) >= usedCutoff)
         .sort((a, b) => (a.date < b.date ? -1 : 1))
-    : [];
+    : splitsUnreported(symbol);
 
   return { symbol: symbol.toUpperCase(), prices: finalPrices, splits };
+}
+
+/**
+ * What an *absent* split-events block means for this symbol: a genuine zero,
+ * or simply unknown.
+ *
+ * Yahoo omits the block both for a symbol that has truly never split and for
+ * one whose split history it doesn't carry, so the response alone can't tell
+ * the two apart — the market has to decide it. For US-listed symbols the
+ * coverage is reliable (AAPL's 2020 4:1, TSLA's 5:1 and 3:1, NVDA's 4:1 and
+ * 10:1, TQQQ's eight splits all come through), so an empty block is a real
+ * zero. For Taiwan-listed ETFs it is not: 0050.TW's 1-into-4 split of June
+ * 2025 is missing entirely even though the prices around it *are* adjusted for
+ * it (~NT$47 where it had traded ~NT$190). Taiwan-listed *stocks* do report
+ * theirs (2330.TW returns ten events), but we can't enumerate which symbols
+ * are covered, so every Taiwan-listed symbol with an empty block is reported
+ * as unknown rather than as a confident zero.
+ *
+ * Returns are unaffected either way — the price series is split-adjusted at
+ * source, so this only governs whether the UI can show a count or a dash.
+ */
+export function splitsUnreported(symbol: string): SplitEvent[] | undefined {
+  return symbol.toUpperCase().endsWith(".TW") ? undefined : [];
 }
 
 function yearsToYahooRange(years: number): string {

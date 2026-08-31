@@ -50,9 +50,6 @@ export const dict = {
     alignedNoticeBefore: "各標的上市時間不同，已自動將比較期間對齊到 ",
     alignedNoticeAfter: " 的最短可用歷史：",
     alignedFullBefore: "所有標的在此期間內皆有完整資料，比較期間：",
-    swingThreshold: "波段反轉門檻(%)",
-    swingUpAvgPct: "平均漲幅(%)",
-    swingDownAvgPct: "平均跌幅(%)",
     trendR2: "趨勢強度R²",
     newHighMonthPct: "創新高月份(%)",
     positiveYearPct: "持有一年獲利率(%)",
@@ -77,7 +74,9 @@ export const dict = {
       "註：資料來源在較長區間會自動改為月線，因此波動度、夏普、波動耗損在不同回測年數間不完全可比（趨勢方向各項已統一以月收盤價計算，不受影響）。",
     trendNote: "長期向上趨勢指標",
     trendNoteText:
-      "波段次數無法呈現趨勢方向：漲跌波段必然交替出現，次數永遠只差 1 次以內，與漲跌無關。以下四項才會隨趨勢方向改變 —— 趨勢強度R²：價格貼合單一指數成長軌跡的程度（取 ln 價格對時間迴歸，帶正負號代表方向，+90 為極穩定長多、-90 為長空）；創新高月份：改寫期間新高的月份佔比；持有一年獲利率：任一月進場並持有 12 個月仍獲利的比例；漲跌動能比：上漲月份漲幅總和 ÷ 下跌月份跌幅總和，大於 1 代表漲勢的「幅度」勝過跌勢，而非只看次數。後三項一律以月收盤價計算，因為資料來源在長區間會自動改成月線，若按每根K棒計數會讓同一指標在不同回測年數下代表不同意義。",
+      "以下四項專門呈現趨勢的「方向」，且都不需要任何可調參數 —— 趨勢強度R²：價格貼合單一指數成長軌跡的程度（取 ln 價格對時間迴歸，帶正負號代表方向，+90 為極穩定長多、-90 為長空）；創新高月份：改寫期間新高的月份佔比；持有一年獲利率：任一月進場並持有 12 個月仍獲利的比例；漲跌動能比：上漲月份漲幅總和 ÷ 下跌月份跌幅總和，大於 1 代表漲勢的「幅度」勝過跌勢，而非只看次數。後三項一律以月收盤價計算，因為資料來源在長區間會自動改成月線，若按每根K棒計數會讓同一指標在不同回測年數下代表不同意義。",
+    splitNote:
+      "註：分割次數來自資料來源的分割事件紀錄。美股標的的紀錄完整可信；台股 ETF 則不然 —— 例如 0050 於 2025 年 6 月的 1 股分割為 4 股並未出現在事件紀錄中（台股個股如 2330 則有），因此台股標的一律顯示「—」（未知），而非誤報為 0 次。無論如何都不影響報酬計算：股價在資料來源端已完成分割回溯調整。",
   },
   en: {
     title: "ETF & Stock Backtest Platform",
@@ -128,9 +127,6 @@ export const dict = {
     alignedNoticeBefore: "Symbols listed at different times — comparison auto-aligned to ",
     alignedNoticeAfter: "'s shortest available history: ",
     alignedFullBefore: "All symbols have complete data for this period — comparing ",
-    swingThreshold: "Swing Threshold (%)",
-    swingUpAvgPct: "Avg Up Swing (%)",
-    swingDownAvgPct: "Avg Down Swing (%)",
     trendR2: "Trend R²",
     newHighMonthPct: "New Highs (% of months)",
     positiveYearPct: "1-Yr Hold Win Rate (%)",
@@ -155,7 +151,9 @@ export const dict = {
       "Note: the data source switches to monthly bars over longer ranges, so volatility, Sharpe, and drag aren't strictly comparable across different backtest lengths. The trend-direction measures all use month-end closes and are unaffected.",
     trendNote: "Long-term uptrend measures",
     trendNoteText:
-      "Swing counts can't show trend direction: up and down legs strictly alternate, so the two counts never differ by more than 1 no matter how the asset trended. These four do respond to direction — Trend R²: how tightly price tracks one steady exponential path (ln price regressed on time), signed by slope, so +90 is a relentless compounder and -90 a relentless decliner. New Highs: share of months closing at a new high for the window. 1-Yr Hold Win Rate: share of rolling 12-month holding periods that ended in profit. Gain/Pain: sum of up-month returns ÷ sum of down-month returns — above 1 means up moves win on size, not just count. The last three all run off month-end closes because the data source silently switches to monthly bars over long ranges, which would otherwise make a per-bar count mean something different at each backtest length.",
+      "These four show the *direction* of a trend, and none of them has a parameter to tune — Trend R²: how tightly price tracks one steady exponential path (ln price regressed on time), signed by slope, so +90 is a relentless compounder and -90 a relentless decliner. New Highs: share of months closing at a new high for the window. 1-Yr Hold Win Rate: share of rolling 12-month holding periods that ended in profit. Gain/Pain: sum of up-month returns ÷ sum of down-month returns — above 1 means up moves win on size, not just count. The last three all run off month-end closes because the data source silently switches to monthly bars over long ranges, which would otherwise make a per-bar count mean something different at each backtest length.",
+    splitNote:
+      "Note: split counts come from the data source's split-event record. Coverage is reliable for US-listed symbols but not for Taiwan-listed ETFs — 0050.TW's 1-into-4 split of June 2025 is absent from the record (Taiwan stocks such as 2330.TW do report theirs), so Taiwan-listed symbols show \"—\" for unknown rather than a wrong 0. Returns are unaffected either way: prices arrive already split-adjusted.",
   },
 } as const;
 
