@@ -3,6 +3,75 @@ import { getManagementFee } from "./symbolCatalog";
 
 const TRADING_DAYS_PER_YEAR = 252;
 const RISK_FREE_RATE = 0.02; // 2% annual, simplification for Sharpe ratio
+const MS_PER_YEAR = 1000 * 60 * 60 * 24 * 365.25;
+
+/**
+ * How many bars per year this series actually carries, measured rather than
+ * assumed.
+ *
+ * The data source silently switches from daily to monthly bars over long
+ * ranges (see CEILING_FETCH_YEARS in the backtest route), so annualizing with
+ * a hardcoded 252 blows up exactly where the range is longest: a 15-year
+ * comparison was reporting 250% volatility and a Sharpe of 4.32 against the
+ * same symbol's 67% / 0.81 at 10 years, purely from scaling monthly returns by
+ * sqrt(252). Deriving the figure from the real bar count over the real
+ * calendar span makes every annualized metric mean the same thing at any
+ * range. Clamped to [1, 252] so a degenerate series can't produce a wild
+ * multiplier.
+ */
+export function periodsPerYear(prices: PricePoint[]): number {
+  if (prices.length < 2) return TRADING_DAYS_PER_YEAR;
+  const years = (Date.parse(prices[prices.length - 1].date) - Date.parse(prices[0].date)) / MS_PER_YEAR;
+  if (!(years > 0)) return TRADING_DAYS_PER_YEAR;
+  return Math.min(TRADING_DAYS_PER_YEAR, Math.max(1, (prices.length - 1) / years));
+}
+
+/**
+ * Up/down capture: how much of the benchmark's average move this symbol picks
+ * up in the periods when the benchmark rose, and when it fell — each as a % of
+ * the benchmark's own average move. A 3x leveraged fund lands near 300%/300%;
+ * a defensive holding shows less down-capture than up-capture.
+ *
+ * This is the mechanism behind a leveraged fund out-earning its underlying
+ * despite a rougher path: it takes ~3x of every move in both directions, and
+ * the underlying simply had more up than down to give.
+ *
+ * Returns are date-aligned (inner join) the same way Beta is, since the two
+ * series can have slightly different trading calendars. Null when too few
+ * periods overlap to mean anything.
+ */
+export function captureRatios(
+  assetReturns: { date: string; value: number }[],
+  marketReturns: { date: string; value: number }[]
+): { up: number | null; down: number | null } {
+  const marketByDate = new Map(marketReturns.map((r) => [r.date, r.value]));
+  let upAsset = 0;
+  let upMarket = 0;
+  let upCount = 0;
+  let downAsset = 0;
+  let downMarket = 0;
+  let downCount = 0;
+  for (const r of assetReturns) {
+    const m = marketByDate.get(r.date);
+    if (m === undefined) continue;
+    if (m > 0) {
+      upAsset += r.value;
+      upMarket += m;
+      upCount++;
+    } else if (m < 0) {
+      downAsset += r.value;
+      downMarket += m;
+      downCount++;
+    }
+  }
+  // Same denominator count on both sides of each ratio, so summing is
+  // equivalent to averaging and avoids a needless division.
+  const MIN_PERIODS = 5;
+  return {
+    up: upCount >= MIN_PERIODS && upMarket !== 0 ? (upAsset / upMarket) * 100 : null,
+    down: downCount >= MIN_PERIODS && downMarket !== 0 ? (downAsset / downMarket) * 100 : null,
+  };
+}
 
 /** Daily simple returns from a price series. */
 export function dailyReturns(prices: PricePoint[]): number[] {
@@ -127,23 +196,44 @@ export function computeMetrics(
   // more robust to gaps from holidays or fetch retries, and avoids the
   // annualization window silently drifting from what the user requested.
   const msSpan = new Date(prices[prices.length - 1].date).getTime() - new Date(prices[0].date).getTime();
-  const calendarYears = msSpan / (1000 * 60 * 60 * 24 * 365.25);
+  const calendarYears = msSpan / MS_PER_YEAR;
   const years = calendarYears > 0 ? calendarYears : prices.length / TRADING_DAYS_PER_YEAR;
   const annualizedReturn =
     years > 0 ? ((Math.pow(last / first, 1 / years) - 1) * 100) : totalReturn;
 
+  // Measured from the series rather than assumed to be daily — see
+  // periodsPerYear() for why a hardcoded 252 silently breaks long ranges.
+  const ppy = periodsPerYear(prices);
   const retsWithDates = dailyReturnsWithDates(prices);
   const rets = retsWithDates.map((r) => r.value);
-  const dailyStd = stdDev(rets);
-  const annualizedVolatility = dailyStd * Math.sqrt(TRADING_DAYS_PER_YEAR) * 100;
+  const periodStd = stdDev(rets);
+  const annualizedVolatility = periodStd * Math.sqrt(ppy) * 100;
 
   const dd = maxDrawdown(prices);
 
-  const excessDailyReturn = mean(rets) - RISK_FREE_RATE / TRADING_DAYS_PER_YEAR;
-  const sharpeRatio =
-    dailyStd > 0
-      ? (excessDailyReturn / dailyStd) * Math.sqrt(TRADING_DAYS_PER_YEAR)
-      : 0;
+  const excessPeriodReturn = mean(rets) - RISK_FREE_RATE / ppy;
+  const sharpeRatio = periodStd > 0 ? (excessPeriodReturn / periodStd) * Math.sqrt(ppy) : 0;
+
+  // The simple average of each period's return, annualized — the raw upward
+  // drift *before* compounding takes its cut. Always >= the compounded (CAGR)
+  // figure, and the gap between them is the volatility drag below.
+  const arithmeticAnnualReturn = mean(rets) * ppy * 100;
+  // What a bumpy path costs per year: a series that gains and loses the same
+  // percentage ends below where it started, and the deeper the swings the
+  // bigger the shortfall (roughly variance/2). This is the number that
+  // reconciles "worse trend quality" with "far higher cumulative return" —
+  // a 3x fund pays several times this drag but starts from 3x the drift, so
+  // it can still finish far ahead. By construction:
+  //   annualizedReturn = arithmeticAnnualReturn - volatilityDrag
+  const volatilityDrag = arithmeticAnnualReturn - annualizedReturn;
+  // Return per unit of worst-case pain (Calmar/MAR). Leverage tends to raise
+  // return and drawdown together, so this shows whether the extra return was
+  // actually bought at a discount or just paid for in full.
+  const calmarRatio = dd < 0 ? annualizedReturn / Math.abs(dd) : null;
+
+  const capture = marketReturns.length > 0
+    ? captureRatios(retsWithDates, marketReturns)
+    : { up: null, down: null };
 
   // Beta: real covariance(asset, SPY) / variance(SPY), date-aligned.
   // null when no market benchmark data was supplied or overlap is too thin —
@@ -167,6 +257,11 @@ export function computeMetrics(
     finalValue: round2(finalValue),
     beta,
     managementFee: round4(managementFee),
+    arithmeticAnnualReturn: round2(arithmeticAnnualReturn),
+    volatilityDrag: round2(volatilityDrag),
+    calmarRatio: calmarRatio === null ? null : round2(calmarRatio),
+    upCapture: capture.up === null ? null : round2(capture.up),
+    downCapture: capture.down === null ? null : round2(capture.down),
   };
 }
 

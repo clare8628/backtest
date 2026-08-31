@@ -57,6 +57,23 @@ export interface BacktestMetrics {
   newHighMonthPct?: number | null;
   positiveYearPct?: number | null;
   gainPainRatio?: number | null;
+  /** Where the compounded return actually came from — these reconcile a fund
+   *  with worse trend quality still finishing far ahead on cumulative return.
+   *  By construction annualizedReturn = arithmeticAnnualReturn - volatilityDrag.
+   *  - arithmeticAnnualReturn: the plain average period return, annualized —
+   *    raw upward drift before compounding takes its cut.
+   *  - volatilityDrag: what the bumpy path costs per year (roughly variance/2).
+   *    A 3x fund pays several times the drag of its underlying but starts from
+   *    3x the drift, so it can still win on the compounded figure.
+   *  - calmarRatio: annualized return per unit of max drawdown — whether the
+   *    extra return was bought at a discount or paid for in full.
+   *  - upCapture / downCapture: % of the benchmark's average up / down move
+   *    this symbol picks up. A 3x fund sits near 300%/300%. */
+  arithmeticAnnualReturn?: number;
+  volatilityDrag?: number;
+  calmarRatio?: number | null;
+  upCapture?: number | null;
+  downCapture?: number | null;
   /** Number of stock/ETF splits within the backtest window — undefined when
    *  the data source doesn't report split history (see SymbolSeries.splits).
    *  A low share price alone doesn't mean low returns: frequent forward

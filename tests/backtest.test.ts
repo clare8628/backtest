@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, countSwings, monthEndCloses, trendStrength } from "@/lib/backtest";
+import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, countSwings, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev } from "@/lib/backtest";
 import { parseStooqCsv, toStooqSymbol } from "@/lib/marketData";
 import { PricePoint, BacktestMetrics } from "@/lib/types";
 
@@ -347,6 +347,85 @@ describe("countSwings", () => {
     const faller = countSwings(series([100, 130, 80, 105, 60, 80, 45]), 10);
     expect(Math.abs(riser.up - riser.down)).toBeLessThanOrEqual(1);
     expect(Math.abs(faller.up - faller.down)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("periodsPerYear", () => {
+  it("measures daily bars as ~252 and monthly bars as ~12", () => {
+    const daily: PricePoint[] = [];
+    const start = Date.parse("2015-01-01T00:00:00Z");
+    for (let d = 0; d < 1000; d++) {
+      daily.push({ date: new Date(start + d * 86_400_000).toISOString().slice(0, 10), close: 100 });
+    }
+    // Calendar-consecutive days top out at the 252 clamp (real series skip weekends).
+    expect(periodsPerYear(daily)).toBe(252);
+    expect(periodsPerYear(monthlySeries(Array.from({ length: 120 }, () => 100)))).toBeCloseTo(12, 0);
+  });
+
+  it("falls back to the daily assumption for a series too short to measure", () => {
+    expect(periodsPerYear([])).toBe(252);
+    expect(periodsPerYear([{ date: "2024-01-01", close: 100 }])).toBe(252);
+  });
+});
+
+describe("computeMetrics annualization", () => {
+  // The regression this guards: monthly bars were being scaled by sqrt(252),
+  // reporting 250% volatility and a Sharpe of 4.32 for a symbol that measured
+  // 67% / 0.81 over a shorter, daily-resolution range.
+  it("annualizes monthly bars by sqrt(12), not sqrt(252)", () => {
+    const closes = [100];
+    for (let i = 0; i < 120; i++) closes.push(closes[closes.length - 1] * (i % 2 === 0 ? 1.05 : 0.97));
+    const prices = monthlySeries(closes);
+    const m = computeMetrics({ symbol: "X", prices });
+
+    const monthlyStd = stdDev(dailyReturns(prices));
+    expect(m.annualizedVolatility).toBeCloseTo(monthlyStd * Math.sqrt(12) * 100, 1);
+  });
+
+  it("decomposes the compounded return into drift minus drag exactly", () => {
+    const closes = [100];
+    for (let i = 0; i < 120; i++) closes.push(closes[closes.length - 1] * (i % 2 === 0 ? 1.05 : 0.97));
+    const m = computeMetrics({ symbol: "X", prices: monthlySeries(closes) });
+    expect(m.arithmeticAnnualReturn! - m.volatilityDrag!).toBeCloseTo(m.annualizedReturn, 1);
+  });
+
+  it("charges a bumpy path more drag than a smooth one of the same drift", () => {
+    const smooth = monthlySeries(Array.from({ length: 121 }, (_, i) => 100 * 1.01 ** i));
+    // Same 1% average monthly drift, but delivered in violent swings.
+    const bumpy = monthlySeries(
+      Array.from({ length: 121 }, (_, i) => 100 * 1.01 ** i * (i % 2 === 0 ? 1.25 : 0.8))
+    );
+    expect(computeMetrics({ symbol: "S", prices: smooth }).volatilityDrag!).toBeLessThan(
+      computeMetrics({ symbol: "B", prices: bumpy }).volatilityDrag!
+    );
+  });
+});
+
+describe("captureRatios", () => {
+  // Needs at least 5 up and 5 down periods to clear captureRatios' minimum.
+  const market = [0.02, -0.01, 0.03, -0.02, 0.01, -0.03, 0.04, -0.015, 0.025, -0.005, 0.012, -0.022].map(
+    (value, i) => ({ date: `2024-02-${String(i + 1).padStart(2, "0")}`, value })
+  );
+
+  it("reports ~300%/300% for a fund that takes 3x of every move", () => {
+    const asset = market.map((r) => ({ date: r.date, value: r.value * 3 }));
+    const { up, down } = captureRatios(asset, market);
+    expect(up).toBeCloseTo(300, 6);
+    expect(down).toBeCloseTo(300, 6);
+  });
+
+  it("shows less down-capture than up-capture for a defensive holding", () => {
+    const asset = market.map((r) => ({ date: r.date, value: r.value > 0 ? r.value : r.value * 0.4 }));
+    const { up, down } = captureRatios(asset, market);
+    expect(up).toBeCloseTo(100, 6);
+    expect(down).toBeCloseTo(40, 6);
+  });
+
+  it("returns null when too few periods overlap to be meaningful", () => {
+    expect(captureRatios([{ date: "2024-01-02", value: 0.02 }], market)).toEqual({
+      up: null,
+      down: null,
+    });
   });
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { t, Lang } from "@/lib/i18n";
 import { searchCatalog } from "@/lib/symbolCatalog";
 import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries } from "@/lib/types";
@@ -19,13 +19,181 @@ interface BacktestResult {
 
 const DEBOUNCE_MS = 500;
 
-/** Green above `neutral`, red below — used for the signed trend measures, where
+/** Blue above `neutral`, red below — used for the signed trend measures, where
  *  the sign (not the magnitude) is what says "uptrend" vs "downtrend". */
 function trendColor(value: number | null | undefined, neutral = 0): string | undefined {
   if (value === undefined || value === null) return undefined;
   if (value > neutral) return "var(--positive)";
   if (value < neutral) return "var(--negative)";
   return undefined;
+}
+
+function Note({ title, body }: { title: string; body: string }) {
+  return (
+    <div
+      className="rounded-lg px-3 py-2 text-xs"
+      style={{ background: "var(--background)", border: "1px solid var(--line)", color: "var(--foreground-muted)" }}
+    >
+      <p className="font-medium mb-1" style={{ color: "var(--foreground)" }}>{title}</p>
+      <p>{body}</p>
+    </div>
+  );
+}
+
+const DASH = "—";
+const pct = (v: number | null | undefined) => (v === undefined || v === null ? DASH : `${v}%`);
+const num = (v: number | null | undefined) => (v === undefined || v === null ? DASH : String(v));
+
+type Dict = ReturnType<typeof t>;
+interface MetricRow {
+  label: string;
+  value: (m: BacktestMetrics) => ReactNode;
+  color?: (m: BacktestMetrics) => string | undefined;
+}
+
+/** The table is transposed — metrics down the side, symbols across the top —
+ *  because there are ~20 metrics and rarely more than a handful of symbols.
+ *  Laid out the other way every metric became a column and the right-hand half
+ *  fell off the screen; this way the width scales with the symbol count the
+ *  user chose, so a normal comparison fits without scrolling at all. Grouping
+ *  the rows into sections also lets related numbers (the return decomposition
+ *  especially, which reads as an equation) sit next to each other. */
+function metricSections(T: Dict): { title: string; rows: MetricRow[] }[] {
+  return [
+    {
+      title: T.groupReturn,
+      rows: [
+        { label: T.totalReturn, value: (m) => pct(m.totalReturn) },
+        { label: T.annualizedReturn, value: (m) => pct(m.annualizedReturn) },
+        { label: T.finalValue, value: (m) => m.finalValue.toLocaleString() },
+      ],
+    },
+    {
+      title: T.groupRisk,
+      rows: [
+        { label: T.volatility, value: (m) => pct(m.annualizedVolatility) },
+        {
+          label: T.maxDrawdown,
+          value: (m) => pct(m.maxDrawdown),
+          color: (m) => (m.maxDrawdown < 0 ? "var(--negative)" : undefined),
+        },
+        { label: T.sharpe, value: (m) => num(m.sharpeRatio) },
+        { label: T.calmarRatio, value: (m) => num(m.calmarRatio) },
+        {
+          label: T.beta,
+          value: (m) =>
+            m.beta === null ? (
+              "N/A"
+            ) : (
+              <>
+                {m.beta}
+                {m.benchmarkSymbol && (
+                  <span className="opacity-50"> ({T.betaVs} {m.benchmarkSymbol.replace(".TW", "")})</span>
+                )}
+              </>
+            ),
+        },
+      ],
+    },
+    {
+      title: T.groupSource,
+      rows: [
+        { label: T.arithmeticAnnualReturn, value: (m) => pct(m.arithmeticAnnualReturn) },
+        {
+          label: T.volatilityDrag,
+          value: (m) => (m.volatilityDrag === undefined ? DASH : `-${m.volatilityDrag}%`),
+          color: () => "var(--negative)",
+        },
+        { label: T.upCapture, value: (m) => pct(m.upCapture) },
+        { label: T.downCapture, value: (m) => pct(m.downCapture) },
+      ],
+    },
+    {
+      title: T.groupTrend,
+      rows: [
+        { label: T.trendR2, value: (m) => num(m.trendR2), color: (m) => trendColor(m.trendR2) },
+        { label: T.newHighMonthPct, value: (m) => pct(m.newHighMonthPct) },
+        { label: T.positiveYearPct, value: (m) => pct(m.positiveYearPct) },
+        {
+          label: T.gainPainRatio,
+          value: (m) => num(m.gainPainRatio),
+          color: (m) => trendColor(m.gainPainRatio, 1),
+        },
+        {
+          label: T.swingUpAvgPct,
+          value: (m) =>
+            m.swingUpAvgPct === undefined || m.swingUpAvgPct === null ? DASH : `+${m.swingUpAvgPct}%`,
+        },
+        {
+          label: T.swingDownAvgPct,
+          value: (m) =>
+            m.swingDownAvgPct === undefined || m.swingDownAvgPct === null ? DASH : `-${m.swingDownAvgPct}%`,
+          color: () => "var(--negative)",
+        },
+      ],
+    },
+    {
+      title: T.groupInfo,
+      rows: [
+        { label: T.maxBacktestYears, value: (m) => num(m.maxBacktestYears) },
+        { label: T.fee, value: (m) => pct(m.managementFee) },
+        { label: T.splitCount, value: (m) => num(m.splitCount) },
+      ],
+    },
+  ];
+}
+
+function MetricsTable({ metrics, T }: { metrics: BacktestMetrics[]; T: Dict }) {
+  const sections = metricSections(T);
+  return (
+    <table className="w-full text-sm border-collapse">
+      <thead>
+        <tr style={{ color: "var(--foreground-muted)" }}>
+          <th className="py-1 pr-4 text-left font-normal">{T.metric}</th>
+          {metrics.map((m) => (
+            <th key={m.symbol} className="py-1 px-2 text-right font-medium" style={{ color: "var(--foreground)" }}>
+              {m.symbol}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {sections.map((section) => (
+          <Fragment key={section.title}>
+            <tr>
+              <td
+                colSpan={metrics.length + 1}
+                className="pt-3 pb-1 text-xs font-medium"
+                style={{ color: "var(--shu)" }}
+              >
+                {section.title}
+              </td>
+            </tr>
+            {section.rows.map((row) => (
+              <tr key={row.label} className="border-t" style={{ borderColor: "var(--line)" }}>
+                <th
+                  scope="row"
+                  className="py-1.5 pr-4 text-left text-xs font-normal"
+                  style={{ color: "var(--foreground-muted)" }}
+                >
+                  {row.label}
+                </th>
+                {metrics.map((m) => (
+                  <td
+                    key={m.symbol}
+                    className="py-1.5 px-2 text-right tabular-nums"
+                    style={{ color: row.color?.(m) }}
+                  >
+                    {row.value(m)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </Fragment>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 
 export default function Home() {
@@ -471,108 +639,15 @@ export default function Home() {
                     )}
 
                     {result.metrics.length > 0 && (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm border-collapse">
-                          <thead>
-                            <tr className="text-left" style={{ color: "var(--foreground-muted)" }}>
-                              <th className="py-1 pr-4">{T.symbols}</th>
-                              <th className="py-1 pr-4">{T.totalReturn}</th>
-                              <th className="py-1 pr-4">{T.annualizedReturn}</th>
-                              <th className="py-1 pr-4">{T.volatility}</th>
-                              <th className="py-1 pr-4">{T.maxDrawdown}</th>
-                              <th className="py-1 pr-4">{T.sharpe}</th>
-                              <th className="py-1 pr-4 text-xs">{T.beta}</th>
-                              <th className="py-1 pr-4 text-xs">{T.fee}</th>
-                              <th className="py-1 pr-4 text-xs">{T.maxBacktestYears}</th>
-                              <th className="py-1 pr-4 text-xs">{T.splitCount}</th>
-                              <th className="py-1 pr-4 text-xs">{T.swingUpAvgPct}</th>
-                              <th className="py-1 pr-4 text-xs">{T.swingDownAvgPct}</th>
-                              <th className="py-1 pr-4 text-xs">{T.trendR2}</th>
-                              <th className="py-1 pr-4 text-xs">{T.newHighMonthPct}</th>
-                              <th className="py-1 pr-4 text-xs">{T.positiveYearPct}</th>
-                              <th className="py-1 pr-4 text-xs">{T.gainPainRatio}</th>
-                              <th className="py-1 pr-4">{T.finalValue}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {result.metrics.map((m) => (
-                              <tr key={m.symbol} className="border-t" style={{ borderColor: "var(--line)" }}>
-                                <td className="py-1.5 pr-4 font-medium">{m.symbol}</td>
-                                <td className="py-1.5 pr-4">{m.totalReturn}%</td>
-                                <td className="py-1.5 pr-4">{m.annualizedReturn}%</td>
-                                <td className="py-1.5 pr-4">{m.annualizedVolatility}%</td>
-                                <td className="py-1.5 pr-4" style={{ color: m.maxDrawdown < 0 ? "var(--negative)" : undefined }}>
-                                  {m.maxDrawdown}%
-                                </td>
-                                <td className="py-1.5 pr-4">{m.sharpeRatio}</td>
-                                <td className="py-1.5 pr-4 text-xs">
-                                  {m.beta === null ? (
-                                    "N/A"
-                                  ) : (
-                                    <>
-                                      {m.beta}
-                                      {m.benchmarkSymbol && (
-                                        <span className="opacity-50">
-                                          {" "}
-                                          ({T.betaVs} {m.benchmarkSymbol.replace(".TW", "")})
-                                        </span>
-                                      )}
-                                    </>
-                                  )}
-                                </td>
-                                <td className="py-1.5 pr-4 text-xs">{m.managementFee}%</td>
-                                <td className="py-1.5 pr-4 text-xs">
-                                  {m.maxBacktestYears !== undefined ? m.maxBacktestYears : "—"}
-                                </td>
-                                <td className="py-1.5 pr-4 text-xs">
-                                  {m.splitCount !== undefined ? m.splitCount : "—"}
-                                </td>
-                                <td className="py-1.5 pr-4 text-xs">
-                                  {m.swingUpAvgPct !== undefined && m.swingUpAvgPct !== null
-                                    ? `+${m.swingUpAvgPct}%`
-                                    : "—"}
-                                </td>
-                                <td className="py-1.5 pr-4 text-xs" style={{ color: "var(--negative)" }}>
-                                  {m.swingDownAvgPct !== undefined && m.swingDownAvgPct !== null
-                                    ? `-${m.swingDownAvgPct}%`
-                                    : "—"}
-                                </td>
-                                <td
-                                  className="py-1.5 pr-4 text-xs"
-                                  style={{ color: trendColor(m.trendR2) }}
-                                >
-                                  {m.trendR2 !== undefined && m.trendR2 !== null ? m.trendR2 : "—"}
-                                </td>
-                                <td className="py-1.5 pr-4 text-xs">
-                                  {m.newHighMonthPct !== undefined && m.newHighMonthPct !== null
-                                    ? `${m.newHighMonthPct}%`
-                                    : "—"}
-                                </td>
-                                <td className="py-1.5 pr-4 text-xs">
-                                  {m.positiveYearPct !== undefined && m.positiveYearPct !== null
-                                    ? `${m.positiveYearPct}%`
-                                    : "—"}
-                                </td>
-                                <td
-                                  className="py-1.5 pr-4 text-xs"
-                                  style={{ color: trendColor(m.gainPainRatio, 1) }}
-                                >
-                                  {m.gainPainRatio !== undefined && m.gainPainRatio !== null
-                                    ? m.gainPainRatio
-                                    : "—"}
-                                </td>
-                                <td className="py-1.5 pr-4">{m.finalValue.toLocaleString()}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        <div
-                          className="rounded-lg px-3 py-2 mt-3 text-xs"
-                          style={{ background: "var(--background)", border: "1px solid var(--line)", color: "var(--foreground-muted)" }}
-                        >
-                          <p className="font-medium mb-1" style={{ color: "var(--foreground)" }}>{T.trendNote}</p>
-                          <p>{T.trendNoteText}</p>
+                      <div className="flex flex-col gap-3">
+                        <div className="overflow-x-auto">
+                          <MetricsTable metrics={result.metrics} T={T} />
                         </div>
+                        <Note title={T.sourceNote} body={T.sourceNoteText} />
+                        <Note title={T.trendNote} body={T.trendNoteText} />
+                        <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
+                          {T.resolutionNote}
+                        </p>
                       </div>
                     )}
 
