@@ -86,7 +86,7 @@ export const dict = {
     perYear: "次/年",
     incomeNote: "債券／收益指標的資料來源",
     incomeNoteText:
-      "估計年化殖利率＝過去 12 個月「實際配發」的每股配息總額 ÷ 最新收盤價，是回顧性的已實現殖利率，不是預測；債券配息會隨利率與持債更動，去年的數字只是參考而非保證。配息頻率為同一區間內的實際配息次數（12 次＝月配、4 次＝季配）。基金規模為資料來源提供的即時淨資產，以該標的自身的交易幣別計價（美股為美元、台股為新台幣）。標的類別與信用評級為人工整理，取自各基金官方名稱所載的信用級別（台灣的基金命名規則要求載明「投資級／A級／BBB／非投等」等字樣）；名稱未載明級別者一律留空顯示「—」，不做推測，實際平均信用評級請以各投信公開說明書與月報為準。個股與未收錄標的的相關欄位皆顯示「—」。",
+      "估計年化殖利率＝過去 12 個月「實際配發」的每股配息總額 ÷ 最新收盤價，是回顧性的已實現殖利率，不是預測；債券配息會隨利率與持債更動，去年的數字只是參考而非保證。配息頻率為同一區間內的實際配息次數（12 次＝月配、4 次＝季配）。基金規模以該標的自身的交易幣別計價（美股為美元、台股為新台幣），為 2026-08-31 自交易所實際抓取的淨資產快照；此欄原本設計為即時查詢，但提供淨資產的端點會對本站主機所在的 IP 回覆 429（請求過於頻繁），線上環境永遠讀不到值，因此改以標註日期的快照呈現，需要更新時可重新抓取。基金規模用於判斷「量級」（是 2,453 億還是 5 億的基金），變動緩慢，標註日期即可看出新舊。標的類別與信用評級為人工整理，取自各基金官方名稱所載的信用級別（台灣的基金命名規則要求載明「投資級／A級／BBB／非投等」等字樣）；名稱未載明級別者一律留空顯示「—」，不做推測，實際平均信用評級請以各投信公開說明書與月報為準。個股與未收錄標的的相關欄位皆顯示「—」。",
     twoSuffixNote:
       "註：台灣的債券 ETF 均在櫃買中心（TPEx）掛牌，代號後綴為 .TWO 而非 .TW；本平台已一併校正其計價幣別（新台幣）與對標基準（0050）。",
     trendNote: "長期向上趨勢指標",
@@ -180,7 +180,7 @@ export const dict = {
     perYear: "/yr",
     incomeNote: "Where the bond / income figures come from",
     incomeNoteText:
-      "Est. Annual Yield is the distributions actually paid per share over the last 12 months divided by the latest close — a backward-looking realised yield, not a forecast. Bond payouts move with rates and holdings, so last year's figure is evidence, not a promise. Distribution Frequency is the number of payments in that same window (12 = monthly, 4 = quarterly). Fund Size is live net assets from the data source, in the fund's own trading currency (USD for US-listed, TWD for Taiwan-listed). Asset Class and Credit Rating are curated from each fund's official name, which under Taiwanese naming rules must state its credit tier; funds whose name states no tier are left blank rather than guessed — check the issuer's prospectus for an actual average rating. Individual stocks and uncatalogued symbols show a dash throughout.",
+      "Est. Annual Yield is the distributions actually paid per share over the last 12 months divided by the latest close — a backward-looking realised yield, not a forecast. Bond payouts move with rates and holdings, so last year's figure is evidence, not a promise. Distribution Frequency is the number of payments in that same window (12 = monthly, 4 = quarterly). Fund Size is in the fund's own trading currency (USD for US-listed, TWD for Taiwan-listed), measured from the exchange on 2026-08-31. It was built as a live lookup, but the endpoint carrying net assets answers this site's host IPs with 429 Too Many Requests, so in production the figure never arrived at all — a dated snapshot of real numbers beats a live lookup that always renders a dash. Fund size moves slowly and is read for scale, so the date makes staleness visible; re-fetch to refresh it. Asset Class and Credit Rating are curated from each fund's official name, which under Taiwanese naming rules must state its credit tier; funds whose name states no tier are left blank rather than guessed — check the issuer's prospectus for an actual average rating. Individual stocks and uncatalogued symbols show a dash throughout.",
     twoSuffixNote:
       "Note: Taiwan's bond ETFs all list on TPEx and carry a .TWO suffix rather than .TW; their currency (TWD) and benchmark (0050) are handled accordingly.",
     trendNote: "Long-term uptrend measures",

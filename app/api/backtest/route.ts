@@ -11,9 +11,9 @@ import {
   trendStrength,
   incomeProfile,
 } from "@/lib/backtest";
-import { fetchMultiple, fetchDailyPrices, fetchFundSizes, isTaiwanListed } from "@/lib/marketData";
+import { fetchMultiple, fetchDailyPrices, isTaiwanListed } from "@/lib/marketData";
 import { Currency, ChartSeries } from "@/lib/types";
-import { getAssetClass, getCreditRating, hasKnownManagementFee } from "@/lib/symbolCatalog";
+import { getAssetClass, getCreditRating, getFundSize, hasKnownManagementFee } from "@/lib/symbolCatalog";
 
 // A Taiwan-listed fund's daily correlation to the US market isn't a meaningful
 // "Beta" for it, so each symbol is measured against its own market's benchmark:
@@ -126,11 +126,6 @@ export async function POST(req: NextRequest) {
       })
     );
 
-    // Net assets live on a separate, rate-limited Yahoo endpoint, so fetch all
-    // of them together and let any individual failure fall through as null
-    // rather than holding up (or failing) the whole backtest.
-    const fundSizes = await fetchFundSizes(alignedResults.map((s) => s.symbol));
-
     const metrics = alignedResults.map((s) => {
       const benchmarkSymbol = benchmarkFor(s.symbol);
       const m = computeMetrics(s, startValue, benchmarkReturns.get(benchmarkSymbol) ?? []);
@@ -152,7 +147,7 @@ export async function POST(req: NextRequest) {
         splitCount,
         assetClass: getAssetClass(s.symbol),
         creditRating: getCreditRating(s.symbol),
-        fundSize: fundSizes.get(s.symbol) ?? null,
+        fundSize: getFundSize(s.symbol),
         fundSizeCurrency: nativeCurrency(s.symbol),
         estimatedYieldPct:
           income.estimatedYieldPct === null ? null : round2(income.estimatedYieldPct),
