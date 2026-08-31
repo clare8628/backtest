@@ -182,9 +182,23 @@ export function splitsUnreported(symbol: string): SplitEvent[] | undefined {
 
 const CRUMB_TTL_MS = 30 * 60 * 1000;
 let crumbSession: { cookie: string; crumb: string; at: number } | null = null;
+// Every symbol in a comparison asks for its fund size at once, so on a cold
+// worker they all reach the handshake together. Without sharing the in-flight
+// attempt each one runs its own, and the losers of that race come back empty —
+// which showed up in production as fund size resolving for some symbols and
+// not others on the first request after a deploy. One handshake, N waiters.
+let crumbInFlight: Promise<{ cookie: string; crumb: string } | null> | null = null;
 
 async function yahooCrumbSession(): Promise<{ cookie: string; crumb: string } | null> {
   if (crumbSession && Date.now() - crumbSession.at < CRUMB_TTL_MS) return crumbSession;
+  if (crumbInFlight) return crumbInFlight;
+  crumbInFlight = negotiateCrumb().finally(() => {
+    crumbInFlight = null;
+  });
+  return crumbInFlight;
+}
+
+async function negotiateCrumb(): Promise<{ cookie: string; crumb: string } | null> {
   try {
     const seed = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": BROWSER_UA } });
     const cookie = (seed.headers.get("set-cookie") ?? "").split(";")[0];
