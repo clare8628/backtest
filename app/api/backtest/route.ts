@@ -12,8 +12,15 @@ import {
   incomeProfile,
 } from "@/lib/backtest";
 import { fetchMultiple, fetchDailyPrices, isTaiwanListed } from "@/lib/marketData";
-import { Currency, ChartSeries } from "@/lib/types";
-import { getAssetClass, getCreditRating, getFundSize, hasKnownManagementFee } from "@/lib/symbolCatalog";
+import { ChartSeries } from "@/lib/types";
+import {
+  FUND_SIZE_AS_OF,
+  fundSizeIn,
+  getAssetClass,
+  getCreditRating,
+  hasKnownManagementFee,
+  nativeCurrencyOf,
+} from "@/lib/symbolCatalog";
 
 // A Taiwan-listed fund's daily correlation to the US market isn't a meaningful
 // "Beta" for it, so each symbol is measured against its own market's benchmark:
@@ -41,10 +48,6 @@ const CEILING_FETCH_YEARS = 30;
 
 function benchmarkFor(symbol: string): string {
   return isTaiwanListed(symbol) ? TW_MARKET_BENCHMARK_SYMBOL : US_MARKET_BENCHMARK_SYMBOL;
-}
-
-function nativeCurrency(symbol: string): Currency {
-  return isTaiwanListed(symbol) ? "TWD" : "USD";
 }
 
 function round2(n: number): number {
@@ -126,11 +129,37 @@ export async function POST(req: NextRequest) {
       })
     );
 
+    // A group that mixes US and Taiwan symbols has to be read in one currency
+    // to be read at all, so fetch the USD/TWD rate once, before anything that
+    // needs it: the chart converts every point with it, and the fund-size
+    // column converts each fund's net assets with the rate on the day those
+    // figures were measured.
+    const currenciesPresent = new Set(alignedResults.map((s) => nativeCurrencyOf(s.symbol)));
+    const mixedCurrencies = currenciesPresent.has("USD") && currenciesPresent.has("TWD");
+
+    let rateAt: ((date: string) => number | null) | null = null;
+    if (mixedCurrencies) {
+      try {
+        const fx = await fetchDailyPrices(USD_TWD_FX_SYMBOL, rangeYears);
+        rateAt = fxLookup(fx.prices);
+      } catch {
+        rateAt = null; // FX unavailable — chart falls back to native-currency-only per symbol.
+      }
+    }
+    // Fund sizes are all quoted in USD once the group spans both markets;
+    // a single-market group keeps the currency that market quotes.
+    const fundSizeSnapshotRate = rateAt ? rateAt(FUND_SIZE_AS_OF) : null;
+
     const metrics = alignedResults.map((s) => {
       const benchmarkSymbol = benchmarkFor(s.symbol);
       const m = computeMetrics(s, startValue, benchmarkReturns.get(benchmarkSymbol) ?? []);
       const trend = trendStrength(s.prices);
       const income = incomeProfile(s.prices, s.dividends);
+      const fundSize = fundSizeIn(
+        s.symbol,
+        mixedCurrencies ? "USD" : nativeCurrencyOf(s.symbol),
+        fundSizeSnapshotRate
+      );
       // Splits within the aligned backtest window specifically — s.splits
       // itself still spans the full requested rangeYears fetch, untrimmed.
       const splitCount = s.splits
@@ -147,8 +176,8 @@ export async function POST(req: NextRequest) {
         splitCount,
         assetClass: getAssetClass(s.symbol),
         creditRating: getCreditRating(s.symbol),
-        fundSize: getFundSize(s.symbol),
-        fundSizeCurrency: nativeCurrency(s.symbol),
+        fundSize: fundSize.value,
+        fundSizeCurrency: fundSize.currency,
         estimatedYieldPct:
           income.estimatedYieldPct === null ? null : round2(income.estimatedYieldPct),
         distributionsPerYear: income.distributionsPerYear,
@@ -159,24 +188,10 @@ export async function POST(req: NextRequest) {
 
     // Chart series in actual price (not indexed), built from the same aligned
     // window as the metrics above so the chart's x-axis and the table's
-    // numbers describe the same period. When the group mixes US and Taiwan
-    // symbols, fetch the USD/TWD rate once so the chart can show either
-    // currency without a data round-trip on toggle.
-    const currenciesPresent = new Set(alignedResults.map((s) => nativeCurrency(s.symbol)));
-    const mixedCurrencies = currenciesPresent.has("USD") && currenciesPresent.has("TWD");
-
-    let rateAt: ((date: string) => number | null) | null = null;
-    if (mixedCurrencies) {
-      try {
-        const fx = await fetchDailyPrices(USD_TWD_FX_SYMBOL, rangeYears);
-        rateAt = fxLookup(fx.prices);
-      } catch {
-        rateAt = null; // FX unavailable — chart falls back to native-currency-only per symbol.
-      }
-    }
-
+    // numbers describe the same period. Both currencies are sent for every
+    // point so the toggle costs no data round-trip.
     const chartSeries: ChartSeries[] = alignedResults.map((s) => {
-      const currency = nativeCurrency(s.symbol);
+      const currency = nativeCurrencyOf(s.symbol);
       const sampled = downsamplePrices(s.prices, 120);
       const points = sampled.map((p) => {
         const rate = rateAt ? rateAt(p.date) : null; // TWD per 1 USD

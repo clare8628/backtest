@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev, incomeProfile } from "@/lib/backtest";
 import { parseStooqCsv, toStooqSymbol, splitsUnreported, isTaiwanListed, symbolCandidates } from "@/lib/marketData";
+import { displaySymbol, fundSizeIn, getFundSize, nativeCurrencyOf } from "@/lib/symbolCatalog";
 import { PricePoint, BacktestMetrics } from "@/lib/types";
 
 function series(closes: number[]): PricePoint[] {
@@ -583,5 +584,62 @@ describe("symbolCandidates", () => {
     expect(symbolCandidates("00679B.TWO")).toEqual([]);
     expect(symbolCandidates("TLT")).toEqual([]);
     expect(symbolCandidates("BRK.B")).toEqual([]);
+  });
+});
+
+describe("displaySymbol", () => {
+  it("names a Taiwan-listed fund beside its code and drops the exchange suffix", () => {
+    expect(displaySymbol("00687B.TWO")).toBe("00687B(國泰20年美債)");
+    expect(displaySymbol("0050.TW")).toBe("0050(元大台灣50 ETF)");
+  });
+
+  it("uses the English name in English", () => {
+    expect(displaySymbol("00720B.TWO", "en")).toBe("00720B(Yuanta US 20+ Year BBB Corporate Bond ETF)");
+  });
+
+  it("leaves US tickers exactly as typed", () => {
+    expect(displaySymbol("TLT")).toBe("TLT");
+    expect(displaySymbol("BRK.B")).toBe("BRK.B");
+  });
+
+  it("keeps the full ticker for a Taiwan symbol it has no name for, suffix included", () => {
+    // Shortening it to "2454" would make it indistinguishable from a US ticker.
+    expect(displaySymbol("2454.TW")).toBe("2454.TW");
+  });
+});
+
+describe("fundSizeIn", () => {
+  const RATE = 30; // TWD per USD
+
+  it("converts a Taiwan fund's net assets to USD for a mixed-market comparison", () => {
+    const twd = getFundSize("00679B.TWO");
+    const converted = fundSizeIn("00679B.TWO", "USD", RATE);
+    expect(converted.currency).toBe("USD");
+    expect(converted.value).toBe(Math.round((twd as number) / RATE));
+  });
+
+  it("leaves a fund already quoted in the target currency untouched", () => {
+    expect(fundSizeIn("TLT", "USD", RATE)).toEqual({ value: getFundSize("TLT"), currency: "USD" });
+  });
+
+  it("keeps the native figure labelled in its own currency when no rate is available", () => {
+    const unconverted = fundSizeIn("00679B.TWO", "USD", null);
+    expect(unconverted).toEqual({ value: getFundSize("00679B.TWO"), currency: "TWD" });
+  });
+
+  it("reports no size, rather than a converted zero, for a symbol with no snapshot", () => {
+    expect(fundSizeIn("AAPL", "USD", RATE)).toEqual({ value: null, currency: "USD" });
+    // 00687B is absent from the source's net-assets data, and mislabelling
+    // its dash "TWD" in a USD column would suggest the column mixes
+    // currencies.
+    expect(fundSizeIn("00687B.TWO", "USD", RATE)).toEqual({ value: null, currency: "USD" });
+  });
+});
+
+describe("nativeCurrencyOf", () => {
+  it("reads the market off the ticker suffix", () => {
+    expect(nativeCurrencyOf("0050.TW")).toBe("TWD");
+    expect(nativeCurrencyOf("00687B.TWO")).toBe("TWD");
+    expect(nativeCurrencyOf("TLT")).toBe("USD");
   });
 });

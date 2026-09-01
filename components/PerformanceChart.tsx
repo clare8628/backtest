@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { ChartSeries, Currency } from "@/lib/types";
 import { Lang, t } from "@/lib/i18n";
+import { displaySymbol } from "@/lib/symbolCatalog";
 
 // 高對比顏色組合
 const COLORS = [
@@ -15,6 +16,15 @@ const COLORS = [
   "#C2185B", // pink
   "#558B2F", // olive
 ];
+
+/** Rough rendered width of an SVG text run: CJK glyphs are full-width, Latin
+ *  roughly 0.55em. Only needs to be close, and only exists because a Taiwan
+ *  symbol's label carries its fund name — a fixed box would clip it. */
+function textWidth(text: string, fontSize: number): number {
+  let w = 0;
+  for (const ch of text) w += /[\u2e80-\u9fff\uff00-\uffef]/.test(ch) ? fontSize : fontSize * 0.55;
+  return w;
+}
 
 interface Props {
   series: ChartSeries[];
@@ -232,12 +242,22 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
     setHoverT(tForX(xPixel));
   }
 
+  // The tooltip lists one line per symbol, and a Taiwan symbol's line carries
+  // its fund name, so the box is sized to its own longest line — clamped so a
+  // long name can't grow it past a third of the chart.
+  const tooltipLines = (hoverPoints ?? []).flatMap((h) =>
+    h.point ? [`${displaySymbol(h.symbol, lang)}: ${formatValue(h.point.value, mode, activeCurrency)}`] : []
+  );
+  const tooltipW = Math.min(
+    320,
+    Math.max(150, ...tooltipLines.map((line) => textWidth(line, 9.5) + 16))
+  );
+
   // While a crisis marker is hovered, its label and the price tooltip must
   // never overlap — both default to roughly the same x (the cursor sits
   // right on the marker). Default to crisis-left/price-right of the marker's
   // line; if the marker sits too close to either chart edge for that split to
   // fit, stack both boxes on whichever side does have room instead.
-  const tooltipW = 150;
   const activeCrisis = hoveredCrisis ? visibleCrises.find((c) => c.date === hoveredCrisis) ?? null : null;
   const activeCrisisX = activeCrisis ? xFor(activeCrisis.t) : null;
   const activeCrisisLabelW = activeCrisis ? labelWidth(lang === "zh" ? activeCrisis.zh : activeCrisis.en) : 0;
@@ -496,7 +516,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
               {hoverPoints.map((h, idx) =>
                 h.point ? (
                   <text key={h.symbol} x={8} y={41 + idx * 14} fontSize={9.5} fill={COLORS[idx % COLORS.length]}>
-                    {h.symbol}: {formatValue(h.point.value, mode, activeCurrency)}
+                    {displaySymbol(h.symbol, lang)}: {formatValue(h.point.value, mode, activeCurrency)}
                   </text>
                 ) : null
               )}
@@ -508,7 +528,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
           {plotted.map((s, idx) => (
             <span key={s.symbol} className="flex items-center gap-1.5">
               <span className="inline-block w-4 h-1 rounded" style={{ background: COLORS[idx % COLORS.length] }} />
-              {s.symbol}
+              {displaySymbol(s.symbol, lang)}
             </span>
           ))}
           <span className="opacity-50">

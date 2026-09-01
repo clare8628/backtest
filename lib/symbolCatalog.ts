@@ -1,3 +1,5 @@
+import { Currency } from "./types";
+
 export interface CatalogEntry {
   symbol: string;
   name: string;
@@ -29,38 +31,44 @@ export interface CatalogEntry {
  * (is this a NT$245bn fund or a NT$500m one?), so a dated figure still answers
  * the question; the date is shown in the UI so staleness is visible rather
  * than implied. Re-run the fetch to refresh it.
+ *
+ * Covers every fund in the catalog, equity ETFs included — a fund-size column
+ * that only fills in for bond ETFs answers the question for none of the
+ * comparisons people actually run. Individual stocks carry no figure by
+ * definition, and two funds (00687B, 00790B) are absent from the source's
+ * net-assets data entirely; all of those show a dash rather than a guess.
  */
 export const FUND_SIZE_AS_OF = "2026-08-31";
 
 /** Curated list of popular global ETFs and stocks for quick search/add.
  *  expenseRatio values reflect each fund's actual published annual expense ratio. */
 export const SYMBOL_CATALOG: CatalogEntry[] = [
-  { symbol: "VOO", name: "Vanguard 標普500 ETF", nameEn: "Vanguard S&P 500 ETF", category: "ETF", expenseRatio: 0.03 },
-  { symbol: "VT", name: "Vanguard 全世界股票 ETF", nameEn: "Vanguard Total World Stock ETF", category: "ETF", expenseRatio: 0.07 },
-  { symbol: "SPY", name: "SPDR 標普500 ETF", nameEn: "SPDR S&P 500 ETF Trust", category: "ETF", expenseRatio: 0.0945 },
-  { symbol: "QQQ", name: "Invesco 那斯達克100 ETF", nameEn: "Invesco QQQ Trust", category: "ETF", expenseRatio: 0.20 },
-  { symbol: "TQQQ", name: "Invesco 那斯達克100 正3倍槓桿 ETF", nameEn: "Invesco QQQ Trust 3x Shares", category: "ETF", expenseRatio: 1.08 },
-  { symbol: "QLD", name: "Direxion 那斯達克100 正3倍槓桿 ETF", nameEn: "Direxion Daily Nasdaq-100 Bull 3x Shares", category: "ETF", expenseRatio: 1.01 },
-  { symbol: "UPRO", name: "ProShares 標普500 正3倍槓桿 ETF", nameEn: "ProShares Ultra Pro S&P 500 ETF", category: "ETF", expenseRatio: 1.01 },
-  { symbol: "SSO", name: "ProShares 標普500 正2倍槓桿 ETF", nameEn: "ProShares Ultra S&P 500 ETF", category: "ETF", expenseRatio: 0.91 },
-  { symbol: "VTI", name: "Vanguard 全美股市 ETF", nameEn: "Vanguard Total Stock Market ETF", category: "ETF", expenseRatio: 0.03 },
-  { symbol: "VXUS", name: "Vanguard 全球（美國除外）ETF", nameEn: "Vanguard Total Intl Stock ETF", category: "ETF", expenseRatio: 0.05 },
-  { symbol: "VEA", name: "Vanguard 已開發市場 ETF", nameEn: "Vanguard FTSE Developed Markets ETF", category: "ETF", expenseRatio: 0.03 },
-  { symbol: "VWO", name: "Vanguard 新興市場 ETF", nameEn: "Vanguard FTSE Emerging Markets ETF", category: "ETF", expenseRatio: 0.07 },
-  { symbol: "ARKK", name: "ARK 創新 ETF", nameEn: "ARK Innovation ETF", category: "ETF", expenseRatio: 0.75 },
-  { symbol: "GLD", name: "SPDR 黃金 ETF", nameEn: "SPDR Gold Shares", category: "ETF", expenseRatio: 0.40 },
+  { symbol: "VOO", name: "Vanguard 標普500 ETF", nameEn: "Vanguard S&P 500 ETF", category: "ETF", expenseRatio: 0.03, fundSizeSnapshot: 1686884319232 },
+  { symbol: "VT", name: "Vanguard 全世界股票 ETF", nameEn: "Vanguard Total World Stock ETF", category: "ETF", expenseRatio: 0.07, fundSizeSnapshot: 97884921856 },
+  { symbol: "SPY", name: "SPDR 標普500 ETF", nameEn: "SPDR S&P 500 ETF Trust", category: "ETF", expenseRatio: 0.0945, fundSizeSnapshot: 795306885120 },
+  { symbol: "QQQ", name: "Invesco 那斯達克100 ETF", nameEn: "Invesco QQQ Trust", category: "ETF", expenseRatio: 0.20, fundSizeSnapshot: 452800643072 },
+  { symbol: "TQQQ", name: "Invesco 那斯達克100 正3倍槓桿 ETF", nameEn: "Invesco QQQ Trust 3x Shares", category: "ETF", expenseRatio: 1.08, fundSizeSnapshot: 32831182848 },
+  { symbol: "QLD", name: "Direxion 那斯達克100 正3倍槓桿 ETF", nameEn: "Direxion Daily Nasdaq-100 Bull 3x Shares", category: "ETF", expenseRatio: 1.01, fundSizeSnapshot: 12760278016 },
+  { symbol: "UPRO", name: "ProShares 標普500 正3倍槓桿 ETF", nameEn: "ProShares Ultra Pro S&P 500 ETF", category: "ETF", expenseRatio: 1.01, fundSizeSnapshot: 5150206464 },
+  { symbol: "SSO", name: "ProShares 標普500 正2倍槓桿 ETF", nameEn: "ProShares Ultra S&P 500 ETF", category: "ETF", expenseRatio: 0.91, fundSizeSnapshot: 7808743424 },
+  { symbol: "VTI", name: "Vanguard 全美股市 ETF", nameEn: "Vanguard Total Stock Market ETF", category: "ETF", expenseRatio: 0.03, fundSizeSnapshot: 2289978572800 },
+  { symbol: "VXUS", name: "Vanguard 全球（美國除外）ETF", nameEn: "Vanguard Total Intl Stock ETF", category: "ETF", expenseRatio: 0.05, fundSizeSnapshot: 645815664640 },
+  { symbol: "VEA", name: "Vanguard 已開發市場 ETF", nameEn: "Vanguard FTSE Developed Markets ETF", category: "ETF", expenseRatio: 0.03, fundSizeSnapshot: 314947534848 },
+  { symbol: "VWO", name: "Vanguard 新興市場 ETF", nameEn: "Vanguard FTSE Emerging Markets ETF", category: "ETF", expenseRatio: 0.07, fundSizeSnapshot: 162032336896 },
+  { symbol: "ARKK", name: "ARK 創新 ETF", nameEn: "ARK Innovation ETF", category: "ETF", expenseRatio: 0.75, fundSizeSnapshot: 5562265088 },
+  { symbol: "GLD", name: "SPDR 黃金 ETF", nameEn: "SPDR Gold Shares", category: "ETF", expenseRatio: 0.40, fundSizeSnapshot: 130322653184 },
   // Taiwan-listed ETFs (Yahoo Finance requires the .TW suffix for TWSE tickers).
   // Several issuers (notably 0050 and 006208) moved to asset-size-tiered management
   // fees in 2025, so these totals are current best-effort snapshots rather than
   // fixed published rates — expect them to drift as fund size changes.
-  { symbol: "0050.TW", name: "元大台灣50 ETF", nameEn: "Yuanta Taiwan Top 50 ETF", category: "ETF", expenseRatio: 0.20 },
-  { symbol: "006208.TW", name: "富邦台50 ETF", nameEn: "Fubon Taiwan 50 ETF", category: "ETF", expenseRatio: 0.23 },
-  { symbol: "0056.TW", name: "元大高股息 ETF", nameEn: "Yuanta Taiwan Dividend Plus ETF", category: "ETF", expenseRatio: 0.66 },
-  { symbol: "00878.TW", name: "國泰永續高股息 ETF", nameEn: "Cathay Taiwan ESG High Dividend ETF", category: "ETF", expenseRatio: 0.59 },
-  { symbol: "00919.TW", name: "群益台灣精選高息 ETF", nameEn: "Capital Taiwan Top Dividend Select ETF", category: "ETF", expenseRatio: 0.55 },
-  { symbol: "00929.TW", name: "復華台灣科技優息 ETF", nameEn: "FSITC Taiwan Technology Optimized Yield ETF", category: "ETF", expenseRatio: 0.60 },
-  { symbol: "00631L.TW", name: "元大台灣50正2 ETF（2倍槓桿）", nameEn: "Yuanta Taiwan 50 Leveraged 2X ETF", category: "ETF", expenseRatio: 1.05 },
-  { symbol: "00632R.TW", name: "元大台灣50反1 ETF（反向1倍）", nameEn: "Yuanta Taiwan 50 Inverse 1X ETF", category: "ETF", expenseRatio: 1.00 },
+  { symbol: "0050.TW", name: "元大台灣50 ETF", nameEn: "Yuanta Taiwan Top 50 ETF", category: "ETF", expenseRatio: 0.20, fundSizeSnapshot: 2283731419136 },
+  { symbol: "006208.TW", name: "富邦台50 ETF", nameEn: "Fubon Taiwan 50 ETF", category: "ETF", expenseRatio: 0.23, fundSizeSnapshot: 435006078976 },
+  { symbol: "0056.TW", name: "元大高股息 ETF", nameEn: "Yuanta Taiwan Dividend Plus ETF", category: "ETF", expenseRatio: 0.66, fundSizeSnapshot: 703518998528 },
+  { symbol: "00878.TW", name: "國泰永續高股息 ETF", nameEn: "Cathay Taiwan ESG High Dividend ETF", category: "ETF", expenseRatio: 0.59, fundSizeSnapshot: 594163007488 },
+  { symbol: "00919.TW", name: "群益台灣精選高息 ETF", nameEn: "Capital Taiwan Top Dividend Select ETF", category: "ETF", expenseRatio: 0.55, fundSizeSnapshot: 538296778752 },
+  { symbol: "00929.TW", name: "復華台灣科技優息 ETF", nameEn: "FSITC Taiwan Technology Optimized Yield ETF", category: "ETF", expenseRatio: 0.60, fundSizeSnapshot: 131343351808 },
+  { symbol: "00631L.TW", name: "元大台灣50正2 ETF（2倍槓桿）", nameEn: "Yuanta Taiwan 50 Leveraged 2X ETF", category: "ETF", expenseRatio: 1.05, fundSizeSnapshot: 264845983744 },
+  { symbol: "00632R.TW", name: "元大台灣50反1 ETF（反向1倍）", nameEn: "Yuanta Taiwan 50 Inverse 1X ETF", category: "ETF", expenseRatio: 1.00, fundSizeSnapshot: 22022539264 },
   // --- Bond ETFs, for evaluating retirement income rather than capital gains.
   // Taiwan-listed bond ETFs trade on TPEx, not the TWSE, so they carry the
   // .TWO suffix (a .TW lookup returns nothing at all for every one of them).
@@ -188,6 +196,8 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "00765B.TWO", name: "群益中國政金債", nameEn: "Capital ICE 0-10 Year China Policy Bank ETF", category: "Bond ETF", assetClass: "中國政策金融債", creditRating: "A+（中國主權級）", fundSizeSnapshot: 59221952 },
   { symbol: "00794B.TWO", name: "群益7+中國政金債", nameEn: "CAPITAL ICE 7+ YEAR CHINA POLICY BANK EXCHANGE TRADED FUND", category: "Bond ETF", assetClass: "中國政策金融債", creditRating: "A+（中國主權級）", fundSizeSnapshot: 46698624 },
   { symbol: "00831B.TWO", name: "新光美債1-3", nameEn: "Shin Kong US Treasury 1-3 Year Bond ETF", category: "Bond ETF", assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 4105768 },
+  // The source reports no net assets for these two, so they show a dash where
+  // every other fund shows a figure.
   { symbol: "00687B.TWO", name: "國泰20年美債", nameEn: "Cathay US Treasury 20+ YR ETF TWD", category: "Bond ETF", assetClass: "美國公債", creditRating: "AA+（美國主權）" },
   { symbol: "00790B.TWO", name: "復華次順位金融債", nameEn: "Fuh Hwa 8+ Year Financial Subordinate Bond ETF", category: "Bond ETF", assetClass: "金融債" },
   { symbol: "BND", name: "Vanguard 總體債券 ETF", nameEn: "Vanguard Total Bond Market ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "綜合債券", creditRating: "投資等級（BBB- 以上）", fundSizeSnapshot: 396675153920 },
@@ -237,6 +247,76 @@ export function getCreditRating(symbol: string): string | undefined {
 /** Net assets as of FUND_SIZE_AS_OF, in the fund's own trading currency. */
 export function getFundSize(symbol: string): number | null {
   return findEntry(symbol)?.fundSizeSnapshot ?? null;
+}
+
+/**
+ * Taiwan's exchanges suffix a ticker with .TW (TWSE) or .TWO (TPEx).
+ *
+ * marketData.isTaiwanListed makes the same test for the data layer; this copy
+ * keeps the catalog — which the browser imports for search and for labelling —
+ * from pulling the network module into the client bundle.
+ */
+const TW_SUFFIX = /\.(TW|TWO)$/i;
+
+/** The market a symbol actually trades in, hence the currency its price and
+ *  net assets are quoted in. */
+export function nativeCurrencyOf(symbol: string): Currency {
+  return TW_SUFFIX.test(symbol.trim()) ? "TWD" : "USD";
+}
+
+/**
+ * How a ticker reads in the UI.
+ *
+ * Taiwan's tickers are opaque serial numbers: 00687B says nothing about what
+ * the fund holds, and its neighbours in the bond-ETF list differ from it by a
+ * single digit — so a Taiwan-listed symbol is shown with its fund name
+ * attached, as "00687B(國泰20年美債)". The exchange suffix is dropped once the
+ * name is there, since the name identifies the fund far better than ".TWO"
+ * does (twoSuffixNote explains the suffix itself). US tickers are already
+ * words — TLT, VOO — and are left exactly as the user typed them.
+ *
+ * A Taiwan symbol the catalog has no name for keeps its full ticker, suffix
+ * included: shortening "2454.TW" to "2454" with nothing appended would leave
+ * it indistinguishable from a US ticker.
+ */
+export function displaySymbol(symbol: string, lang: "zh" | "en" = "zh"): string {
+  const trimmed = symbol.trim();
+  if (!TW_SUFFIX.test(trimmed)) return trimmed;
+  const entry = findEntry(trimmed);
+  if (!entry) return trimmed;
+  const name = lang === "en" ? entry.nameEn : entry.name;
+  return `${trimmed.replace(TW_SUFFIX, "")}(${name})`;
+}
+
+/**
+ * Net assets in the currency the comparison is being read in.
+ *
+ * A group holding both markets otherwise prints "1,674 億 TWD" next to
+ * "$41.5B", which invites reading the Taiwan fund as the larger of the two
+ * when it is roughly an eighth the size. Converting at `usdTwdRate` — the rate
+ * on FUND_SIZE_AS_OF, not today's, since that is when the figures were
+ * measured — puts both on one scale.
+ *
+ * When no rate is available (the FX fetch failed) the native figure is
+ * returned in its native currency rather than converted at a guessed rate: a
+ * correctly-labelled TWD number is honest, an invented USD one is not.
+ *
+ * @param usdTwdRate TWD per 1 USD, or null when unknown.
+ */
+export function fundSizeIn(
+  symbol: string,
+  target: Currency,
+  usdTwdRate: number | null
+): { value: number | null; currency: Currency } {
+  const value = getFundSize(symbol);
+  const native = nativeCurrencyOf(symbol);
+  // Nothing to convert: with no snapshot the UI shows a dash, so report the
+  // currency the column is in rather than one this fund never contributed to.
+  if (value === null) return { value: null, currency: target };
+  if (native === target) return { value, currency: native };
+  if (usdTwdRate === null || !(usdTwdRate > 0)) return { value, currency: native };
+  const converted = target === "USD" ? value / usdTwdRate : value * usdTwdRate;
+  return { value: Math.round(converted), currency: target };
 }
 
 /**

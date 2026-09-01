@@ -81,9 +81,11 @@ export interface BacktestMetrics {
   splitCount?: number;
   /** Income profile, for judging a holding as retirement cash flow rather than
    *  capital gain. assetClass/creditRating are curated (see symbolCatalog);
-   *  fundSize is read live from the data source in fundSizeCurrency, the
-   *  fund's own trading currency; the yield and distribution count are
-   *  computed from the distributions actually paid over the trailing year.
+   *  fundSize is a dated snapshot (see FUND_SIZE_AS_OF) quoted in
+   *  fundSizeCurrency — the fund's own trading currency, or USD for every
+   *  symbol once a comparison spans both markets and the figures have to be
+   *  comparable; the yield and distribution count are computed from the
+   *  distributions actually paid over the trailing year.
    *  Every one is optional/null rather than defaulted, so "we have no figure"
    *  never renders as a confident zero. */
   assetClass?: string;

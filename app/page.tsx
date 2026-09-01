@@ -2,7 +2,7 @@
 
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { t, Lang } from "@/lib/i18n";
-import { searchCatalog } from "@/lib/symbolCatalog";
+import { displaySymbol, searchCatalog } from "@/lib/symbolCatalog";
 import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries, Currency } from "@/lib/types";
 import { loadGroups, upsertGroup, deleteGroup, newGroupId } from "@/lib/storage";
 import PerformanceChart from "@/components/PerformanceChart";
@@ -86,7 +86,7 @@ interface MetricRow {
  *  user chose, so a normal comparison fits without scrolling at all. Grouping
  *  the rows into sections also lets related numbers (the return decomposition
  *  especially, which reads as an equation) sit next to each other. */
-function metricSections(T: Dict): { title: string; rows: MetricRow[] }[] {
+function metricSections(T: Dict, lang: Lang): { title: string; rows: MetricRow[] }[] {
   return [
     {
       title: T.groupReturn,
@@ -116,7 +116,7 @@ function metricSections(T: Dict): { title: string; rows: MetricRow[] }[] {
               <>
                 {m.beta}
                 {m.benchmarkSymbol && (
-                  <span className="opacity-50"> ({T.betaVs} {m.benchmarkSymbol.replace(".TW", "")})</span>
+                  <span className="opacity-50"> ({T.betaVs} {displaySymbol(m.benchmarkSymbol, lang)})</span>
                 )}
               </>
             ),
@@ -177,8 +177,8 @@ function metricSections(T: Dict): { title: string; rows: MetricRow[] }[] {
   ];
 }
 
-function MetricsTable({ metrics, T }: { metrics: BacktestMetrics[]; T: Dict }) {
-  const sections = metricSections(T);
+function MetricsTable({ metrics, T, lang }: { metrics: BacktestMetrics[]; T: Dict; lang: Lang }) {
+  const sections = metricSections(T, lang);
   return (
     <table className="w-full text-sm border-collapse">
       <thead>
@@ -186,7 +186,7 @@ function MetricsTable({ metrics, T }: { metrics: BacktestMetrics[]; T: Dict }) {
           <th className="py-1 pr-4 text-left font-normal">{T.metric}</th>
           {metrics.map((m) => (
             <th key={m.symbol} className="py-1 px-2 text-right font-medium" style={{ color: "var(--foreground)" }}>
-              {m.symbol}
+              {displaySymbol(m.symbol, lang)}
             </th>
           ))}
         </tr>
@@ -315,7 +315,10 @@ export default function Home() {
     if (draftSymbols.length === 0) return;
     const group: ComparisonGroup = {
       id: newGroupId(),
-      title: draftTitle.trim() || draftSymbols.join(" / "),
+      // An unnamed group is titled by its symbols, so those carry their fund
+      // names too — "00679B.TWO / 00687B.TWO" names two funds that differ by
+      // one digit and says nothing about either.
+      title: draftTitle.trim() || draftSymbols.map((s) => displaySymbol(s, lang)).join(" / "),
       symbols: draftSymbols,
       createdAt: new Date().toISOString(),
       rangeYears,
@@ -470,7 +473,7 @@ export default function Home() {
                   className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm"
                   style={{ background: "var(--line)" }}
                 >
-                  {s}
+                  {displaySymbol(s, lang)}
                   <button onClick={() => removeDraftSymbol(s)} className="opacity-60 hover:opacity-100">
                     ×
                   </button>
@@ -514,7 +517,7 @@ export default function Home() {
                     <h3 className="font-display text-xl">{g.title}</h3>
                     {!isEditing && (
                       <p className="text-xs mt-0.5" style={{ color: "var(--foreground-muted)" }}>
-                        {T.symbols}: {g.symbols.join(", ") || "—"}
+                        {T.symbols}: {g.symbols.map((s) => displaySymbol(s, lang)).join(", ") || "—"}
                       </p>
                     )}
                   </div>
@@ -552,7 +555,7 @@ export default function Home() {
                           className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm"
                           style={{ background: "var(--line)" }}
                         >
-                          {s}
+                          {displaySymbol(s, lang)}
                           <button
                             onClick={() => removeSymbolFromGroup(g, s)}
                             className="opacity-60 hover:opacity-100"
@@ -617,7 +620,7 @@ export default function Home() {
                   <div className="flex flex-col gap-4">
                     {result.errors.length > 0 && (
                       <p className="text-xs" style={{ color: "var(--negative)" }}>
-                        {T.errorFetch}: {result.errors.map((e) => e.symbol).join(", ")}
+                        {T.errorFetch}: {result.errors.map((e) => displaySymbol(e.symbol, lang)).join(", ")}
                       </p>
                     )}
 
@@ -626,7 +629,7 @@ export default function Home() {
                         {result.constrainedBy ? (
                           <>
                             {T.alignedNoticeBefore}
-                            <strong>{result.constrainedBy}</strong>
+                            <strong>{displaySymbol(result.constrainedBy, lang)}</strong>
                             {T.alignedNoticeAfter}
                           </>
                         ) : (
@@ -651,7 +654,7 @@ export default function Home() {
                     {result.metrics.length > 0 && (
                       <div className="flex flex-col gap-3">
                         <div className="overflow-x-auto">
-                          <MetricsTable metrics={result.metrics} T={T} />
+                          <MetricsTable metrics={result.metrics} T={T} lang={lang} />
                         </div>
                         <Note title={T.sourceNote} body={T.sourceNoteText} />
                         <Note title={T.trendNote} body={T.trendNoteText} />
@@ -686,7 +689,9 @@ export default function Home() {
                               className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3 rounded-lg px-3 py-2"
                               style={{ background: "var(--background)" }}
                             >
-                              <div className="flex items-center gap-2 sm:w-32 shrink-0">
+                              {/* Wider than the ticker alone needs: a Taiwan
+                                  symbol carries its fund name here too. */}
+                              <div className="flex items-center gap-2 sm:w-56 shrink-0">
                                 <span
                                   className="inline-flex items-center justify-center rounded-full text-xs font-semibold shrink-0"
                                   style={{
@@ -698,7 +703,7 @@ export default function Home() {
                                 >
                                   {r.rank}
                                 </span>
-                                <span className="font-semibold whitespace-nowrap">{r.symbol}</span>
+                                <span className="font-semibold">{displaySymbol(r.symbol, lang)}</span>
                               </div>
                               <span className="text-xs opacity-60 sm:w-24 shrink-0">
                                 {T.score}: {r.score}
