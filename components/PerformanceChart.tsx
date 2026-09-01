@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { ChartSeries, Currency } from "@/lib/types";
 import { Lang, t } from "@/lib/i18n";
-import { displaySymbol } from "@/lib/symbolCatalog";
+import { displaySymbol, symbolLabel } from "@/lib/symbolCatalog";
 
 // 高對比顏色組合
 const COLORS = [
@@ -16,6 +16,23 @@ const COLORS = [
   "#C2185B", // pink
   "#558B2F", // olive
 ];
+
+/**
+ * A series' label under the chart: ticker on top, fund name centred beneath,
+ * matching how the metrics table labels its columns. The hover tooltip keeps
+ * the one-line parenthesised form instead — a second line per series would
+ * double the height of a box that already lists every symbol.
+ */
+function LegendLabel({ symbol, lang }: { symbol: string; lang: Lang }) {
+  const { code, name } = symbolLabel(symbol, lang);
+  if (!name) return <>{code}</>;
+  return (
+    <span className="inline-flex flex-col items-center leading-tight">
+      <span>{code}</span>
+      <span className="opacity-70">{name}</span>
+    </span>
+  );
+}
 
 /** Rough rendered width of an SVG text run: CJK glyphs are full-width, Latin
  *  roughly 0.55em. Only needs to be close, and only exists because a Taiwan
@@ -528,7 +545,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
           {plotted.map((s, idx) => (
             <span key={s.symbol} className="flex items-center gap-1.5">
               <span className="inline-block w-4 h-1 rounded" style={{ background: COLORS[idx % COLORS.length] }} />
-              {displaySymbol(s.symbol, lang)}
+              <LegendLabel symbol={s.symbol} lang={lang} />
             </span>
           ))}
           <span className="opacity-50">

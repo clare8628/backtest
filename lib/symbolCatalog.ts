@@ -265,27 +265,45 @@ export function nativeCurrencyOf(symbol: string): Currency {
 }
 
 /**
- * How a ticker reads in the UI.
+ * The two parts of how a ticker reads in the UI: the code, and the fund name
+ * that goes with it.
  *
  * Taiwan's tickers are opaque serial numbers: 00687B says nothing about what
  * the fund holds, and its neighbours in the bond-ETF list differ from it by a
- * single digit — so a Taiwan-listed symbol is shown with its fund name
- * attached, as "00687B(國泰20年美債)". The exchange suffix is dropped once the
- * name is there, since the name identifies the fund far better than ".TWO"
- * does (twoSuffixNote explains the suffix itself). US tickers are already
- * words — TLT, VOO — and are left exactly as the user typed them.
+ * single digit — so a Taiwan-listed symbol carries its fund name. The exchange
+ * suffix is dropped once the name is there, since the name identifies the fund
+ * far better than ".TWO" does (twoSuffixNote explains the suffix itself). US
+ * tickers are already words — TLT, VOO — and are left exactly as the user
+ * typed them, with no name.
  *
  * A Taiwan symbol the catalog has no name for keeps its full ticker, suffix
  * included: shortening "2454.TW" to "2454" with nothing appended would leave
  * it indistinguishable from a US ticker.
+ *
+ * Two parts rather than one string because the two are laid out differently
+ * depending on the room available — stacked, name centred under the code,
+ * wherever the symbol labels a column or a tag; run together in parentheses
+ * where it has to sit inside a line of prose (see displaySymbol).
  */
-export function displaySymbol(symbol: string, lang: "zh" | "en" = "zh"): string {
+export function symbolLabel(
+  symbol: string,
+  lang: "zh" | "en" = "zh"
+): { code: string; name?: string } {
   const trimmed = symbol.trim();
-  if (!TW_SUFFIX.test(trimmed)) return trimmed;
+  if (!TW_SUFFIX.test(trimmed)) return { code: trimmed };
   const entry = findEntry(trimmed);
-  if (!entry) return trimmed;
-  const name = lang === "en" ? entry.nameEn : entry.name;
-  return `${trimmed.replace(TW_SUFFIX, "")}(${name})`;
+  if (!entry) return { code: trimmed };
+  return {
+    code: trimmed.replace(TW_SUFFIX, ""),
+    name: lang === "en" ? entry.nameEn : entry.name,
+  };
+}
+
+/** symbolLabel as a single string — "00687B(國泰20年美債)" — for the places a
+ *  symbol appears mid-sentence and cannot be stacked. */
+export function displaySymbol(symbol: string, lang: "zh" | "en" = "zh"): string {
+  const { code, name } = symbolLabel(symbol, lang);
+  return name ? `${code}(${name})` : code;
 }
 
 /**

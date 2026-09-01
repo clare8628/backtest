@@ -2,7 +2,7 @@
 
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { t, Lang } from "@/lib/i18n";
-import { displaySymbol, searchCatalog } from "@/lib/symbolCatalog";
+import { displaySymbol, searchCatalog, symbolLabel } from "@/lib/symbolCatalog";
 import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries, Currency } from "@/lib/types";
 import { loadGroups, upsertGroup, deleteGroup, newGroupId } from "@/lib/storage";
 import PerformanceChart from "@/components/PerformanceChart";
@@ -37,6 +37,27 @@ function Note({ title, body }: { title: string; body: string }) {
       <p className="font-medium mb-1" style={{ color: "var(--foreground)" }}>{title}</p>
       <p>{body}</p>
     </div>
+  );
+}
+
+/**
+ * A symbol wherever it labels something rather than sits in a sentence: the
+ * ticker on top, its fund name on a second line centred underneath.
+ *
+ * Stacked rather than run together in parentheses because a Taiwan fund's name
+ * is longer than its code — inline, one column header became a wrapping run of
+ * text that pushed the table wide; stacked, the label is only as wide as its
+ * longer line and the code stays the first thing read. US tickers have no
+ * name and render as the single line they already were.
+ */
+function SymbolLabel({ symbol, lang }: { symbol: string; lang: Lang }) {
+  const { code, name } = symbolLabel(symbol, lang);
+  if (!name) return <>{code}</>;
+  return (
+    <span className="inline-flex flex-col items-center leading-tight">
+      <span>{code}</span>
+      <span className="text-xs font-normal opacity-70">{name}</span>
+    </span>
   );
 }
 
@@ -186,7 +207,7 @@ function MetricsTable({ metrics, T, lang }: { metrics: BacktestMetrics[]; T: Dic
           <th className="py-1 pr-4 text-left font-normal">{T.metric}</th>
           {metrics.map((m) => (
             <th key={m.symbol} className="py-1 px-2 text-right font-medium" style={{ color: "var(--foreground)" }}>
-              {displaySymbol(m.symbol, lang)}
+              <SymbolLabel symbol={m.symbol} lang={lang} />
             </th>
           ))}
         </tr>
@@ -473,7 +494,7 @@ export default function Home() {
                   className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm"
                   style={{ background: "var(--line)" }}
                 >
-                  {displaySymbol(s, lang)}
+                  <SymbolLabel symbol={s} lang={lang} />
                   <button onClick={() => removeDraftSymbol(s)} className="opacity-60 hover:opacity-100">
                     ×
                   </button>
@@ -555,7 +576,7 @@ export default function Home() {
                           className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm"
                           style={{ background: "var(--line)" }}
                         >
-                          {displaySymbol(s, lang)}
+                          <SymbolLabel symbol={s} lang={lang} />
                           <button
                             onClick={() => removeSymbolFromGroup(g, s)}
                             className="opacity-60 hover:opacity-100"
@@ -703,7 +724,9 @@ export default function Home() {
                                 >
                                   {r.rank}
                                 </span>
-                                <span className="font-semibold">{displaySymbol(r.symbol, lang)}</span>
+                                <span className="font-semibold">
+                                  <SymbolLabel symbol={r.symbol} lang={lang} />
+                                </span>
                               </div>
                               <span className="text-xs opacity-60 sm:w-24 shrink-0">
                                 {T.score}: {r.score}
