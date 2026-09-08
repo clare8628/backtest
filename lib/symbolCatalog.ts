@@ -56,7 +56,36 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "VEA", name: "Vanguard 已開發市場 ETF", nameEn: "Vanguard FTSE Developed Markets ETF", category: "ETF", expenseRatio: 0.03, fundSizeSnapshot: 314947534848 },
   { symbol: "VWO", name: "Vanguard 新興市場 ETF", nameEn: "Vanguard FTSE Emerging Markets ETF", category: "ETF", expenseRatio: 0.07, fundSizeSnapshot: 162032336896 },
   { symbol: "ARKK", name: "ARK 創新 ETF", nameEn: "ARK Innovation ETF", category: "ETF", expenseRatio: 0.75, fundSizeSnapshot: 5562265088 },
-  { symbol: "GLD", name: "SPDR 黃金 ETF", nameEn: "SPDR Gold Shares", category: "ETF", expenseRatio: 0.40, fundSizeSnapshot: 130322653184 },
+  // --- Gold. Three different instruments that all get called a "gold ETF":
+  //  * Physical bullion (GLD, IAU, GLDM ...) — holds allocated gold in a vault;
+  //    tracks spot gold minus the fee.
+  //  * Gold futures (00635U.TW, 00708L.TW) — rolls exchange-traded futures, so
+  //    it also carries roll yield and, for the 2x one, daily-reset leverage.
+  //  * Gold miners (GDX, GDXJ ...) — an equity ETF of mining companies. Moves
+  //    with gold but geared to it, and with company/operational risk on top;
+  //    not a substitute for holding the metal.
+  // expenseRatio is each fund's published net figure; the Taiwan futures ETFs
+  // are left blank (no verified figure — Yahoo reports 0.00% for them, which is
+  // not real). fundSizeSnapshot is omitted for everything added here: the
+  // snapshot fetch (see FUND_SIZE_AS_OF) has not been re-run to cover them, so
+  // they show a dash rather than a stale or guessed number.
+  { symbol: "GLD", name: "SPDR 黃金 ETF", nameEn: "SPDR Gold Shares", category: "Gold ETF", expenseRatio: 0.40, fundSizeSnapshot: 130322653184 },
+  { symbol: "IAU", name: "iShares 黃金信託 ETF", nameEn: "iShares Gold Trust", category: "Gold ETF", expenseRatio: 0.25 },
+  { symbol: "GLDM", name: "SPDR 黃金 MiniShares ETF", nameEn: "SPDR Gold MiniShares Trust", category: "Gold ETF", expenseRatio: 0.10 },
+  { symbol: "SGOL", name: "abrdn 實體黃金 ETF", nameEn: "abrdn Physical Gold Shares ETF", category: "Gold ETF", expenseRatio: 0.17 },
+  { symbol: "IAUM", name: "iShares 黃金信託 Micro ETF", nameEn: "iShares Gold Trust Micro", category: "Gold ETF", expenseRatio: 0.09 },
+  { symbol: "BAR", name: "GraniteShares 黃金信託 ETF", nameEn: "GraniteShares Gold Trust", category: "Gold ETF", expenseRatio: 0.17 },
+  { symbol: "AAAU", name: "Goldman Sachs 實體黃金 ETF", nameEn: "Goldman Sachs Physical Gold ETF", category: "Gold ETF", expenseRatio: 0.18 },
+  { symbol: "OUNZ", name: "VanEck Merk 黃金 ETF", nameEn: "VanEck Merk Gold ETF", category: "Gold ETF", expenseRatio: 0.25 },
+  // Gold-futures ETFs on the TWSE (期信 ETF). 00708L resets its 2x exposure
+  // daily, so it tracks 2x gold only day-to-day, not over long holds.
+  { symbol: "00635U.TW", name: "元大S&P黃金 ETF", nameEn: "Yuanta S&P Gold ETF", category: "Gold ETF" },
+  { symbol: "00708L.TW", name: "元大S&P黃金正2 ETF（2倍槓桿）", nameEn: "Yuanta S&P Gold Leveraged 2X ETF", category: "Gold ETF" },
+  // Gold-miner equity ETFs.
+  { symbol: "GDX", name: "VanEck 黃金礦業 ETF", nameEn: "VanEck Gold Miners ETF", category: "Gold Miner ETF", expenseRatio: 0.51 },
+  { symbol: "GDXJ", name: "VanEck 小型黃金礦業 ETF", nameEn: "VanEck Junior Gold Miners ETF", category: "Gold Miner ETF", expenseRatio: 0.52 },
+  { symbol: "RING", name: "iShares MSCI 全球黃金礦業 ETF", nameEn: "iShares MSCI Global Gold Miners ETF", category: "Gold Miner ETF", expenseRatio: 0.39 },
+  { symbol: "SGDM", name: "Sprott 黃金礦業 ETF", nameEn: "Sprott Gold Miners ETF", category: "Gold Miner ETF", expenseRatio: 0.50 },
   // Taiwan-listed ETFs (Yahoo Finance requires the .TW suffix for TWSE tickers).
   // Several issuers (notably 0050 and 006208) moved to asset-size-tiered management
   // fees in 2025, so these totals are current best-effort snapshots rather than
@@ -66,7 +95,26 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "0056.TW", name: "元大高股息 ETF", nameEn: "Yuanta Taiwan Dividend Plus ETF", category: "ETF", expenseRatio: 0.66, fundSizeSnapshot: 703518998528 },
   { symbol: "00878.TW", name: "國泰永續高股息 ETF", nameEn: "Cathay Taiwan ESG High Dividend ETF", category: "ETF", expenseRatio: 0.59, fundSizeSnapshot: 594163007488 },
   { symbol: "00919.TW", name: "群益台灣精選高息 ETF", nameEn: "Capital Taiwan Top Dividend Select ETF", category: "ETF", expenseRatio: 0.55, fundSizeSnapshot: 538296778752 },
+  { symbol: "00713.TW", name: "元大台灣高息低波 ETF", nameEn: "Yuanta Taiwan High Dividend Low Volatility ETF", category: "ETF" },
   { symbol: "00929.TW", name: "復華台灣科技優息 ETF", nameEn: "FSITC Taiwan Technology Optimized Yield ETF", category: "ETF", expenseRatio: 0.60, fundSizeSnapshot: 131343351808 },
+  { symbol: "00915.TW", name: "凱基優選高股息30 ETF", nameEn: "KGI Taiwan Premium Selection High Dividend 30 ETF", category: "ETF" },
+  { symbol: "00918.TW", name: "大華優利高填息30 ETF", nameEn: "Dahan Taiwan High Dividend 30 ETF", category: "ETF" },
+  { symbol: "00939.TW", name: "統一台灣高息動能 ETF", nameEn: "UPAMC Taiwan High Dividend Momentum ETF", category: "ETF" },
+  { symbol: "00940.TW", name: "元大台灣價值高息 ETF", nameEn: "Yuanta Taiwan Value High Dividend ETF", category: "ETF" },
+  { symbol: "00934.TW", name: "中信成長高股息 ETF", nameEn: "CTBC TIP Customized Taiwan Growth and High Dividend ETF", category: "ETF" },
+  { symbol: "00936.TW", name: "台新臺灣AI優息動能 ETF", nameEn: "Taishin TIP Customized Taiwan ESG High Dividend Small/Mid-Cap ETF", category: "ETF" },
+  { symbol: "00944.TW", name: "野村趨勢動能高股息 ETF", nameEn: "Nomura Taiwan Momentum High Dividend ETF", category: "ETF" },
+  { symbol: "00946.TW", name: "群益科技高息成長 ETF", nameEn: "Capital TIP Customized Taiwan Tech High Dividend And Growth ETF", category: "ETF" },
+  { symbol: "00900.TW", name: "富邦特選高股息30 ETF", nameEn: "Fubon Taiwan High Dividend 30 ETF", category: "ETF" },
+  { symbol: "00701.TW", name: "國泰股利精選30 ETF", nameEn: "Cathay TIP TAIEX+ Low Volatility Select 30 ETF", category: "ETF" },
+  { symbol: "00730.TW", name: "富邦臺灣優質高息 ETF", nameEn: "Fubon Dow Jones Taiwan High-Quality Dividend 30 ETF", category: "ETF" },
+  { symbol: "00731.TW", name: "復華富時高息低波 ETF", nameEn: "Fuh Hwa FTSE Taiwan High Div Low Vol ETF", category: "ETF" },
+  { symbol: "00907.TW", name: "永豐優息存股 ETF", nameEn: "SinoPac Taiwan Superior Dividend Highlight Stocks ETF", category: "ETF" },
+  { symbol: "00930.TW", name: "永豐ESG低碳高息 ETF", nameEn: "SinoPac Taiwan ESG Low Carbon High Dividend ETF", category: "ETF" },
+  { symbol: "00932.TW", name: "兆豐永續高息等權 ETF", nameEn: "Mega Taiwan ESG High Dividend Equal Weight ETF", category: "ETF" },
+  { symbol: "00943.TW", name: "兆豐電子高息等權 ETF", nameEn: "Mega Taiwan IT Growth and High Dividend Equal Weight ETF", category: "ETF" },
+  { symbol: "00961.TW", name: "FT臺灣永續高息 ETF", nameEn: "Franklin Templeton SinoAm Taiwan ESG High Dividend ETF", category: "ETF" },
+  { symbol: "00927.TW", name: "群益半導體收益 ETF", nameEn: "Capital TIP Taiwan Semiconductor Dividend Yield ETF", category: "ETF" },
   { symbol: "00631L.TW", name: "元大台灣50正2 ETF（2倍槓桿）", nameEn: "Yuanta Taiwan 50 Leveraged 2X ETF", category: "ETF", expenseRatio: 1.05, fundSizeSnapshot: 264845983744 },
   { symbol: "00632R.TW", name: "元大台灣50反1 ETF（反向1倍）", nameEn: "Yuanta Taiwan 50 Inverse 1X ETF", category: "ETF", expenseRatio: 1.00, fundSizeSnapshot: 22022539264 },
   // --- Bond ETFs, for evaluating retirement income rather than capital gains.
@@ -99,6 +147,20 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "AGG", name: "iShares 美國綜合債券 ETF", nameEn: "iShares Core U.S. Aggregate Bond ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "綜合債券", creditRating: "投資等級（BBB- 以上）", fundSizeSnapshot: 137109602304 },
   { symbol: "BNDX", name: "Vanguard 國際綜合債券 ETF（美元避險）", nameEn: "Vanguard Total International Bond ETF", category: "Bond ETF", expenseRatio: 0.07, assetClass: "國際綜合債券", creditRating: "投資等級（BBB- 以上）", fundSizeSnapshot: 122521632768 },
   { symbol: "MUB", name: "iShares 美國市政債 ETF", nameEn: "iShares National Muni Bond ETF", category: "Bond ETF", expenseRatio: 0.05, assetClass: "美國市政債", creditRating: "高評級（A- 以上）", fundSizeSnapshot: 45275856896 },
+  // US-listed short-term / ultra-short Treasury ETFs — cash-like holdings that
+  // track T-bill or 1-3yr yields with negligible duration risk. expenseRatio is
+  // each fund's published net figure (SGOV's is after a fee waiver). No
+  // fundSizeSnapshot: the FUND_SIZE_AS_OF fetch has not been re-run to cover
+  // them, so they show a dash rather than a stale or guessed number.
+  { symbol: "SGOV", name: "iShares 0-3個月美國公債 ETF", nameEn: "iShares 0-3 Month Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.09, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
+  { symbol: "BIL", name: "SPDR 彭博1-3個月美國國庫券 ETF", nameEn: "SPDR Bloomberg 1-3 Month T-Bill ETF", category: "Bond ETF", expenseRatio: 0.1356, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
+  { symbol: "SHV", name: "iShares 短期美國公債 ETF", nameEn: "iShares Short Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
+  { symbol: "GBIL", name: "Goldman Sachs Access 0-1年美國公債 ETF", nameEn: "Goldman Sachs Access Treasury 0-1 Year ETF", category: "Bond ETF", expenseRatio: 0.12, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
+  { symbol: "USFR", name: "WisdomTree 美國浮動利率公債 ETF", nameEn: "WisdomTree Floating Rate Treasury Fund", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國浮動利率公債", creditRating: "AA+（美國主權）" },
+  { symbol: "TFLO", name: "iShares 美國浮動利率公債 ETF", nameEn: "iShares Treasury Floating Rate Bond ETF", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國浮動利率公債", creditRating: "AA+（美國主權）" },
+  { symbol: "VGSH", name: "Vanguard 短期美國公債 ETF", nameEn: "Vanguard Short-Term Treasury ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
+  { symbol: "SCHO", name: "Schwab 短期美國公債 ETF", nameEn: "Schwab Short-Term U.S. Treasury ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
+  { symbol: "SPTS", name: "SPDR 投資組合短期美國公債 ETF", nameEn: "SPDR Portfolio Short Term Treasury ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
 
   // --- Taiwan-listed (TPEx) investment-grade bond ETFs, ordered by fund size.
   { symbol: "00937B.TWO", name: "群益ESG投等債20+", nameEn: "CAPITAL ICE ESG 20+ Year BBB Us Corporate ETF", category: "Bond ETF", assetClass: "投資級公司債", creditRating: "BBB 級", fundSizeSnapshot: 245334228992 },
@@ -211,6 +273,19 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "BRK.B", name: "波克夏海瑟威", nameEn: "Berkshire Hathaway Inc.", category: "Stock", expenseRatio: 0 },
   { symbol: "TSM", name: "台積電（ADR）", nameEn: "Taiwan Semiconductor (ADR)", category: "Stock", expenseRatio: 0 },
   { symbol: "JPM", name: "摩根大通", nameEn: "JPMorgan Chase & Co.", category: "Stock", expenseRatio: 0 },
+  // --- High-moat stocks: dominant, hard-to-displace franchises across
+  // payment networks, beverages, and other consumer/healthcare staples.
+  { symbol: "V", name: "Visa", nameEn: "Visa Inc.", category: "Stock", expenseRatio: 0 },
+  { symbol: "MA", name: "萬事達卡", nameEn: "Mastercard Inc.", category: "Stock", expenseRatio: 0 },
+  { symbol: "AXP", name: "美國運通", nameEn: "American Express Co.", category: "Stock", expenseRatio: 0 },
+  { symbol: "KO", name: "可口可樂", nameEn: "The Coca-Cola Co.", category: "Stock", expenseRatio: 0 },
+  { symbol: "PEP", name: "百事公司", nameEn: "PepsiCo Inc.", category: "Stock", expenseRatio: 0 },
+  { symbol: "COST", name: "好市多", nameEn: "Costco Wholesale Corp.", category: "Stock", expenseRatio: 0 },
+  { symbol: "WMT", name: "沃爾瑪", nameEn: "Walmart Inc.", category: "Stock", expenseRatio: 0 },
+  { symbol: "MCD", name: "麥當勞", nameEn: "McDonald's Corp.", category: "Stock", expenseRatio: 0 },
+  { symbol: "PG", name: "寶僑", nameEn: "Procter & Gamble Co.", category: "Stock", expenseRatio: 0 },
+  { symbol: "UNH", name: "聯合健康集團", nameEn: "UnitedHealth Group Inc.", category: "Stock", expenseRatio: 0 },
+  { symbol: "JNJ", name: "嬌生", nameEn: "Johnson & Johnson", category: "Stock", expenseRatio: 0 },
 ];
 
 /**
@@ -339,17 +414,25 @@ export function fundSizeIn(
 
 /**
  * Ranks a catalog entry against a search query, lower is more relevant.
- * Ticker prefix matches (e.g. "00" -> 0050.TW) rank above ticker substring
- * matches, which rank above name matches. Without this, short numeric
- * queries like "00" would get swamped by unrelated funds whose name happens
- * to contain a "00" (e.g. "標普500", "那斯達克100"), burying the actual
- * 00xxx-prefixed Taiwan ETF tickers past the result cap.
+ * An exact ticker match ranks above prefix matches, which rank above ticker
+ * substring matches, which rank above name matches.
+ *
+ * The exact-match tier exists because a one- or two-letter ticker (V, MA) is
+ * otherwise a prefix of many longer ones (VOO, VT, VTI, VXUS, VEA, VWO ...)
+ * and, sharing their rank, gets pushed past the 8-result cap in array order —
+ * so typing the ticker exactly would never surface the stock it names.
+ *
+ * The prefix-over-name tier exists because short numeric queries like "00"
+ * would otherwise be swamped by unrelated funds whose name happens to contain
+ * a "00" (e.g. "標普500", "那斯達克100"), burying the actual 00xxx-prefixed
+ * Taiwan ETF tickers past the same cap.
  */
 function matchRank(e: CatalogEntry, q: string): number {
   const symbol = e.symbol.toLowerCase();
-  if (symbol.startsWith(q)) return 0;
-  if (symbol.includes(q)) return 1;
-  if (e.name.toLowerCase().includes(q) || e.nameEn.toLowerCase().includes(q)) return 2;
+  if (symbol === q) return 0;
+  if (symbol.startsWith(q)) return 1;
+  if (symbol.includes(q)) return 2;
+  if (e.name.toLowerCase().includes(q) || e.nameEn.toLowerCase().includes(q)) return 3;
   return -1; // no match
 }
 

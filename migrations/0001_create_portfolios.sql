@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS portfolios (
   title TEXT NOT NULL,
   symbols TEXT NOT NULL,
   rangeYears INTEGER NOT NULL DEFAULT 5,
+  startValue INTEGER DEFAULT 1000,
+  rangeFitted INTEGER DEFAULT 0,
   createdAt TEXT NOT NULL,
   updatedAt TEXT NOT NULL
 );

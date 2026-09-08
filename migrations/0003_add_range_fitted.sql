@@ -1,0 +1,12 @@
+-- Adds the rangeFitted column the API reads and writes.
+--
+-- A group's first backtest snaps its rangeYears up to the shared backtestable
+-- ceiling and marks rangeFitted so it never auto-fits again; moving the range
+-- slider by hand marks it too. Without the column every UPDATE/INSERT from the
+-- API fails with "table portfolios has no column named rangeFitted".
+--
+-- Run this ONLY on a database that predates the fix. SQLite has no
+-- "ADD COLUMN IF NOT EXISTS", so re-running it errors with "duplicate column
+-- name" — harmless, but it cannot be applied blindly. 0001 now creates the
+-- column directly, so a fresh database needs 0001 only.
+ALTER TABLE portfolios ADD COLUMN rangeFitted INTEGER DEFAULT 0;

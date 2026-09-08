@@ -1,105 +1,306 @@
 @import "tailwindcss";
 
-/* Design tokens sourced from design3.md — Letters (letters.app) style analysis */
+/* Design tokens sourced from design.md — Equals (equals.com) style analysis.
+ *
+ * Two brand values are carried at two strengths each: the literal brand hue for
+ * fills and ornament, and a darkened "ink" variant for anything set as text on
+ * --background. Equals uses the bright values for text on its marketing pages;
+ * at the type sizes this app uses they land around 3:1, so text takes the ink
+ * variant instead. Contrast ratios below are against --background.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #151515;
-  --foreground-muted: #6b6b6b;
-  --washi: #ffffff;
-  --sumi: #070709;
-  --matsu: #779bc1; /* accent — sky blue (primary), from hero gradient */
-  --matsu-light: #9abfda;
-  --shu: #4a7aa8; /* accent used for labels/eyebrow — darker blue for AA contrast */
-  --shu-light: #9abfda;
-  --line: #e7e7e7;
-  --card-bg: #f2f2f2;
-  --cta-bg: #070709;
+  /* Color — neutrals */
+  --background: #faf9f5; /* warm off-white canvas, never pure white */
+  --foreground: #000000;
+  --foreground-muted: #7a7a78;
+  --surface: #ffffff; /* cards and product chrome sit *above* the canvas */
+  --line: #e5e2da; /* hairline — the spreadsheet cell border of the system */
+
+  /* Color — orchid, the single saturated accent (CTAs and links only) */
+  --orchid: #b074ce; /* brand value: fills, dots, ornament */
+  --orchid-ink: #8e4fae; /* 5.3:1 as text; also the pill fill, 5.5:1 under white */
+  --orchid-ink-hover: #7a3f97;
+  --orchid-band: #efe3f5; /* full-bleed band shared by closing CTA + footer */
+
+  /* Color — amber, reserved for numbered section eyebrows */
+  --amber: #ff5a36; /* brand value: ornament only */
+  --amber-ink: #c4401b; /* 5.0:1 — the eyebrow label */
+
+  /* Color — financial values. Equals leaves positives black and marks only
+   * negatives; this app charts signed trend measures where both signs carry
+   * meaning, so positive keeps a hue. Blue rather than green so the pair stays
+   * separable under red-green colour vision deficiency. */
   --negative: #d64545;
-  /* Blue rather than green so positive/negative stay distinguishable under
-     red-green colour vision deficiency, and to sit on the existing accent. */
   --positive: #2f6ea8;
-  --hero-top: #779bc1;
-  --hero-mid: #9abfda;
-  --hero-bottom: #cbdfec;
+
+  /* Decorative pixel-block gradients — peripheral ornament, never behind text */
+  --pixel-lavender-from: #d8c5ec;
+  --pixel-lavender-to: #f3ecfa;
+  --pixel-aqua-from: #8fe0e0;
+  --pixel-aqua-to: #e4f8f6;
+
+  /* Typography. Serrif Condensed and Unica77 are licensed faces; these are the
+   * fallback stacks design.md recommends, with CJK serif/sans added because the
+   * app ships zh alongside en. */
+  --font-display: "Serrif Condensed", "Canela", "Tiempos Headline", Georgia,
+    "Noto Serif TC", "Songti TC", serif;
+  --font-body: "Unica77", "Suisse Int'l", "Inter", -apple-system,
+    BlinkMacSystemFont, "Noto Sans TC", "PingFang TC", sans-serif;
+  --font-mono: "Unica77 Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular,
+    monospace;
+
+  /* Shape */
+  --radius-pill: 60px;
+  --radius-card: 10px;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-body);
+  --font-serif: var(--font-display);
+  --font-mono: var(--font-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: "Open Runde", "Open Runde Placeholder", -apple-system, "Hiragino Sans", "Noto Sans TC", "Noto Sans JP", Arial, sans-serif;
-  letter-spacing: -0.18px;
+  font-family: var(--font-body);
+  font-size: 18px;
+  line-height: 24px;
+  letter-spacing: -0.09px;
 }
 
+/* Display face carries every headline. Leading is near 1:1 and tracking
+ * negative, per the source — both only read correctly at large sizes, so the
+ * ratios are tied to font-size rather than fixed. */
 h1,
 h2,
+h3,
 .font-display {
-  font-family: "Open Runde", "Open Runde Placeholder", -apple-system, "Noto Sans TC", sans-serif;
-  font-weight: 600;
-  letter-spacing: -0.03em;
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
 }
 
+.hero-title {
+  font-size: clamp(44px, 7.5vw, 110px);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+/* The signature two-line headline: line 1 states the claim in black, line 2
+ * elaborates in grey at the same font and size. Only colour separates them. */
+.headline-sub {
+  color: var(--foreground-muted);
+}
+
+/* Numbered section eyebrow — the one place the system gets a technical
+ * texture. Kept at 14px rather than the source's ~12px because the captions
+ * beneath it are 12–14px, and an eyebrow that reads smaller than the body it
+ * introduces stops working as a label. */
 .eyebrow {
-  font-family: "Open Runde", "Open Runde Placeholder", -apple-system, sans-serif;
-  color: var(--shu);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 0.9375rem; /* 15px — must stay larger than body/caption text (text-xs/text-sm) */
-  font-weight: 600;
   display: block;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--amber-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 
+/* Saved comparisons hang as a gallery: each one a small framed picture on the
+ * canvas. Opening a tile lets it span the full row, because a metrics table
+ * and a chart cannot live in a 280px column. */
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 22px 18px;
+  /* Stretch, not start: tiles in a row share a height so the buttons line up
+   * across the wall, and `mt-auto` on the button row does the rest. */
+  align-items: stretch;
+}
+
+.gallery-tile {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.gallery-tile:hover:not(.is-expanded),
+.gallery-tile:focus-within:not(.is-expanded) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.gallery-tile.is-expanded {
+  grid-column: 1 / -1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-tile {
+    transition: none;
+  }
+  .gallery-tile:hover:not(.is-expanded),
+  .gallery-tile:focus-within:not(.is-expanded) {
+    transform: none;
+  }
+}
+
+/* Stands in for the thumbnail before a comparison has been run, so tiles in a
+ * row keep the same height instead of jostling as results arrive. */
+.tile-placeholder {
+  border-radius: 6px;
+  background: linear-gradient(
+    135deg,
+    var(--pixel-lavender-from),
+    var(--pixel-lavender-to) 45%,
+    var(--pixel-aqua-to)
+  );
+  opacity: 0.55;
+}
+
+/* Group headers inside the metrics table. Same mono/uppercase texture as the
+ * eyebrow so the two read as one family, but in ink — amber stays reserved for
+ * the numbered section labels. */
+.table-group {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* Metrics table (資產矩陣) typography scaled 1.331x (1.1x * 1.1x * 1.1x) */
+.metrics-table {
+  font-size: calc(0.875rem * 1.331); /* 14px * 1.331 = 18.634px */
+  line-height: calc(1.25rem * 1.331);
+}
+
+.metrics-table .text-xs {
+  font-size: calc(0.75rem * 1.331); /* 12px * 1.331 = 15.972px */
+  line-height: calc(1rem * 1.331);
+}
+
+.metrics-table .table-group {
+  font-size: calc(12px * 1.331); /* 12px * 1.331 = 15.972px */
+}
+
+/* Cards hold real product chrome (tables, charts) — white, hairline, barely
+ * lifted. The shadow is a sheet of paper on a desk, not an elevation level. */
 .card {
-  background: var(--card-bg);
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 1.5rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
+/* The only place a saturated colour appears as a fill. */
 .btn-primary {
-  background: var(--cta-bg);
+  background: var(--orchid-ink);
   color: #fff;
-  border-radius: 100px;
-  font-weight: 600;
-  padding: 12px 24px;
-  transition: background-color 0.15s ease, transform 0.1s ease;
-}
-
-.btn-primary:hover {
-  background: #1a1a1c;
-}
-
-.btn-accent {
-  background: var(--matsu);
-  color: #fff;
-  border-radius: 100px;
-  font-weight: 600;
-  padding: 12px 24px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-body);
+  font-weight: 400;
   transition: background-color 0.15s ease;
 }
 
-.btn-accent:hover {
-  background: var(--matsu-light);
+.btn-primary:hover:not(:disabled) {
+  background: var(--orchid-ink-hover);
+}
+
+/* Everything that is not the single CTA: pill outline, no fill. */
+.btn-ghost {
+  background: transparent;
+  color: var(--foreground);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--orchid-ink);
+  color: var(--orchid-ink);
 }
 
 .pill-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  background: #fff;
-  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
   padding: 0.25rem 0.75rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
-.hero-gradient {
-  background: linear-gradient(180deg, var(--hero-top) 0%, var(--hero-mid) 58%, var(--hero-bottom) 100%);
+/* Inputs read as spreadsheet cells: square-ish, hairline, white. */
+.field {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--foreground);
+}
+
+.field:focus {
+  outline: none;
+  border-color: var(--orchid-ink);
+}
+
+/* Attribution-style rows: plain content on the page, separated by hairlines
+ * rather than boxed into cards. */
+.hairline-row + .hairline-row {
+  border-top: 1px solid var(--line);
+}
+
+/* Full-bleed light-orchid band unifying the closing CTA and the footer — they
+ * share one background with no hard break between them. */
+.band-orchid {
+  background: var(--orchid-band);
+}
+
+/* Peripheral ornament: small gradient bars stacked like a bar chart, placed at
+ * the hero's edges. Decorative only — aria-hidden at the call site, and hidden
+ * outright on narrow screens where there is no margin to spare. */
+.pixel-stack {
+  display: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 84px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  pointer-events: none;
+}
+
+@media (min-width: 1024px) {
+  .pixel-stack {
+    display: flex;
+  }
+}
+
+.pixel-block {
+  height: 26px;
+  border-radius: 3px;
+}
+
+.pixel-block--lavender {
+  background: linear-gradient(
+    180deg,
+    var(--pixel-lavender-from),
+    var(--pixel-lavender-to)
+  );
+}
+
+.pixel-block--aqua {
+  background: linear-gradient(
+    180deg,
+    var(--pixel-aqua-from),
+    var(--pixel-aqua-to)
+  );
 }

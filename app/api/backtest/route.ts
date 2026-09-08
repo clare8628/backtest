@@ -63,10 +63,22 @@ export async function POST(req: NextRequest) {
       typeof body?.startValue === "number" && body.startValue > 0 ? body.startValue : 1000;
 
     if (symbols.length === 0) {
-      return NextResponse.json({ error: "symbols is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "symbols is required", metrics: [], recommendations: [], chartSeries: [], errors: [] },
+        { status: 400 }
+      );
     }
-    if (symbols.length > 10) {
-      return NextResponse.json({ error: "max 10 symbols per comparison" }, { status: 400 });
+    if (symbols.length > 15) {
+      return NextResponse.json(
+        {
+          error: "max 15 symbols per comparison",
+          metrics: [],
+          recommendations: [],
+          chartSeries: [],
+          errors: [{ symbol: "*", message: "max 15 symbols per comparison" }],
+        },
+        { status: 400 }
+      );
     }
 
     // Main fetch at the user's requested (daily-resolution) range, plus a

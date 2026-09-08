@@ -114,6 +114,13 @@ export interface ComparisonGroup {
   createdAt: string;
   rangeYears: number;
   startValue?: number; // 起點金額，預設 1000
+  /**
+   * Whether `rangeYears` is a settled choice rather than the untouched default.
+   * A group's first backtest snaps `rangeYears` up to the shared backtestable
+   * ceiling (the youngest symbol's history) and sets this; moving the slider by
+   * hand also sets it. Once set, the auto-fit never runs for that group again.
+   */
+  rangeFitted?: boolean;
 }
 
 export interface IndexedPoint {

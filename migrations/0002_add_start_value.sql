@@ -1,0 +1,12 @@
+-- Adds the startValue column the API has always read and written.
+--
+-- 0001 never had it, so any database created from the migrations alone rejects
+-- every INSERT with "table portfolios has no column named startValue". The
+-- production database was patched by hand at some point and already has the
+-- column; only databases built from these files are missing it.
+--
+-- Run this ONLY on a database that predates the fix. SQLite has no
+-- "ADD COLUMN IF NOT EXISTS", so re-running it errors with "duplicate column
+-- name" — harmless, but it means this cannot be applied blindly. 0001 now
+-- creates the column directly, so a fresh database needs 0001 only.
+ALTER TABLE portfolios ADD COLUMN startValue INTEGER DEFAULT 1000;

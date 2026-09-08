@@ -11,7 +11,9 @@
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "db:create": "wrangler d1 create backtest-portfolios",
-    "db:migrate": "wrangler d1 execute backtest-portfolios --file ./migrations/0001_create_portfolios.sql",
+    "db:migrate": "wrangler d1 execute backtest-portfolios --remote --file ./migrations/0001_create_portfolios.sql",
+    "db:migrate:0003": "wrangler d1 execute backtest-portfolios --remote --file ./migrations/0003_add_range_fitted.sql",
+    "db:migrate:local": "wrangler d1 execute backtest-portfolios --local --file ./migrations/0001_create_portfolios.sql",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {

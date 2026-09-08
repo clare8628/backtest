@@ -6,7 +6,7 @@ import { Lang, t } from "@/lib/i18n";
 import { displaySymbol, symbolLabel } from "@/lib/symbolCatalog";
 
 // 高對比顏色組合
-const COLORS = [
+export const SERIES_COLORS = [
   "#2E7D32", // deep green
   "#D32F2F", // bright red
   "#1976D2", // bright blue
@@ -317,10 +317,10 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
             <button
               key={m}
               onClick={() => setMode(m)}
-              className="px-2 py-1 rounded-md"
+              className="px-3 py-1 rounded-full"
               style={{
                 border: "1px solid var(--line)",
-                background: mode === m ? "var(--matsu)" : "transparent",
+                background: mode === m ? "var(--orchid-ink)" : "transparent",
                 color: mode === m ? "white" : "inherit",
               }}
             >
@@ -333,10 +333,10 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
             <button
               key={s}
               onClick={() => setScale(s)}
-              className="px-2 py-1 rounded-md"
+              className="px-3 py-1 rounded-full"
               style={{
                 border: "1px solid var(--line)",
-                background: scale === s ? "var(--matsu)" : "transparent",
+                background: scale === s ? "var(--orchid-ink)" : "transparent",
                 color: scale === s ? "white" : "inherit",
               }}
             >
@@ -350,10 +350,10 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
               <button
                 key={c}
                 onClick={() => setDisplayCurrency(c)}
-                className="px-2 py-1 rounded-md"
+                className="px-3 py-1 rounded-full"
                 style={{
                   border: "1px solid var(--line)",
-                  background: activeCurrency === c ? "var(--matsu)" : "transparent",
+                  background: activeCurrency === c ? "var(--orchid-ink)" : "transparent",
                   color: activeCurrency === c ? "white" : "inherit",
                 }}
               >
@@ -428,7 +428,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
 
           {/* series lines */}
           {plotted.map((s, idx) => {
-            const color = COLORS[idx % COLORS.length];
+            const color = SERIES_COLORS[idx % SERIES_COLORS.length];
             const d = s.points
               .map((p, i) => `${i === 0 ? "M" : "L"} ${xFor(p.t).toFixed(1)} ${yFor(p.value).toFixed(1)}`)
               .join(" ");
@@ -467,7 +467,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
                       cy={yFor(p.value)}
                       r={3.5}
                       fill="#B71C1C"
-                      stroke="var(--washi)"
+                      stroke="var(--surface)"
                       strokeWidth={1.2}
                     />
                   );
@@ -486,7 +486,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
                 />
                 {hoveredCrisis === c.date && (
                   <g transform={`translate(${boxX}, ${padding.top + 2})`}>
-                    <rect x={0} y={0} width={w} height={18} rx={4} fill="var(--washi)" stroke="#B71C1C" style={{ opacity: 0.97 }} />
+                    <rect x={0} y={0} width={w} height={18} rx={4} fill="var(--surface)" stroke="#B71C1C" style={{ opacity: 0.97 }} />
                     <text x={8} y={13} fontSize={9} fontWeight={600} fill="#B71C1C">
                       {label}
                     </text>
@@ -502,7 +502,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
               <line x1={hoverX} x2={hoverX} y1={padding.top} y2={height - padding.bottom} stroke="currentColor" strokeOpacity={0.35} strokeWidth={1} />
               {hoverPoints?.map((h, idx) =>
                 h.point ? (
-                  <circle key={h.symbol} cx={xFor(h.point.t)} cy={yFor(h.point.value)} r={3.5} fill={COLORS[idx % COLORS.length]} stroke="var(--washi)" strokeWidth={1.5} />
+                  <circle key={h.symbol} cx={xFor(h.point.t)} cy={yFor(h.point.value)} r={3.5} fill={SERIES_COLORS[idx % SERIES_COLORS.length]} stroke="var(--surface)" strokeWidth={1.5} />
                 ) : null
               )}
             </>
@@ -517,7 +517,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
                 width={tooltipW}
                 height={30 + hoverPoints.length * 14}
                 rx={6}
-                fill="var(--washi)"
+                fill="var(--surface)"
                 stroke="var(--line)"
                 style={{ opacity: 0.97 }}
               />
@@ -532,7 +532,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
               </text>
               {hoverPoints.map((h, idx) =>
                 h.point ? (
-                  <text key={h.symbol} x={8} y={41 + idx * 14} fontSize={9.5} fill={COLORS[idx % COLORS.length]}>
+                  <text key={h.symbol} x={8} y={41 + idx * 14} fontSize={9.5} fill={SERIES_COLORS[idx % SERIES_COLORS.length]}>
                     {displaySymbol(h.symbol, lang)}: {formatValue(h.point.value, mode, activeCurrency)}
                   </text>
                 ) : null
@@ -544,7 +544,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
         <div className="flex flex-wrap gap-3 mt-2 text-xs">
           {plotted.map((s, idx) => (
             <span key={s.symbol} className="flex items-center gap-1.5">
-              <span className="inline-block w-4 h-1 rounded" style={{ background: COLORS[idx % COLORS.length] }} />
+              <span className="inline-block w-4 h-1 rounded" style={{ background: SERIES_COLORS[idx % SERIES_COLORS.length] }} />
               <LegendLabel symbol={s.symbol} lang={lang} />
             </span>
           ))}

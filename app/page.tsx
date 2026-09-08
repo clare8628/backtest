@@ -6,6 +6,7 @@ import { displaySymbol, searchCatalog, symbolLabel } from "@/lib/symbolCatalog";
 import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries, Currency } from "@/lib/types";
 import { loadGroups, upsertGroup, deleteGroup, newGroupId } from "@/lib/storage";
 import PerformanceChart from "@/components/PerformanceChart";
+import Sparkline from "@/components/Sparkline";
 
 interface BacktestResult {
   metrics: BacktestMetrics[];
@@ -18,6 +19,13 @@ interface BacktestResult {
 }
 
 const DEBOUNCE_MS = 500;
+
+/** Range-slider bounds, and the value a brand-new group starts at before its
+ *  first backtest fits it to the data. */
+const RANGE_MIN = 1;
+const RANGE_MAX = 20;
+const DEFAULT_RANGE_YEARS = 5;
+const MAX_SYMBOLS_PER_GROUP = 15;
 
 /** Blue above `neutral`, red below — used for the signed trend measures, where
  *  the sign (not the magnitude) is what says "uptrend" vs "downtrend". */
@@ -201,7 +209,7 @@ function metricSections(T: Dict, lang: Lang): { title: string; rows: MetricRow[]
 function MetricsTable({ metrics, T, lang }: { metrics: BacktestMetrics[]; T: Dict; lang: Lang }) {
   const sections = metricSections(T, lang);
   return (
-    <table className="w-full text-sm border-collapse">
+    <table className="w-full border-collapse metrics-table">
       <thead>
         <tr style={{ color: "var(--foreground-muted)" }}>
           <th className="py-1 pr-4 text-left font-normal">{T.metric}</th>
@@ -218,8 +226,7 @@ function MetricsTable({ metrics, T, lang }: { metrics: BacktestMetrics[]; T: Dic
             <tr>
               <td
                 colSpan={metrics.length + 1}
-                className="pt-3 pb-1 text-xs font-medium"
-                style={{ color: "var(--shu)" }}
+                className="table-group pt-4 pb-1"
               >
                 {section.title}
               </td>
@@ -259,28 +266,18 @@ export default function Home() {
   const [draftTitle, setDraftTitle] = useState("");
   const [draftSymbols, setDraftSymbols] = useState<string[]>([]);
   const [query, setQuery] = useState("");
-  const [rangeYears, setRangeYears] = useState(5);
+  const [rangeYears, setRangeYears] = useState(DEFAULT_RANGE_YEARS);
   const [startValue, setStartValue] = useState(1000);
 
   const [results, setResults] = useState<Record<string, BacktestResult>>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  /** Which tile is open. One at a time: an open tile spans the whole grid row,
+   *  so two of them would leave no gallery to come back to. */
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [editQuery, setEditQuery] = useState("");
 
   const debounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-
-  useEffect(() => {
-    loadGroups()
-      .then((loaded) => {
-        setGroups(loaded);
-        // Auto-expand each saved group with its latest backtest result on load.
-        loaded.forEach((g) => {
-          if (g.symbols.length > 0) runBacktest(g);
-        });
-      })
-      .catch(() => setGroups([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const suggestions = useMemo(() => searchCatalog(query), [query]);
   const editSuggestions = useMemo(() => searchCatalog(editQuery), [editQuery]);
@@ -288,6 +285,10 @@ export default function Home() {
   function addSymbol(sym: string) {
     const s = sym.trim().toUpperCase();
     if (!s || draftSymbols.includes(s)) return;
+    if (draftSymbols.length >= MAX_SYMBOLS_PER_GROUP) {
+      alert(T.maxSymbolsReached);
+      return;
+    }
     setDraftSymbols([...draftSymbols, s]);
     setQuery("");
   }
@@ -310,8 +311,26 @@ export default function Home() {
         }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) {
+        const errorMsg = data.error || `HTTP ${res.status}`;
+        setResults((prev) => ({
+          ...prev,
+          [group.id]: {
+            metrics: [],
+            recommendations: [],
+            chartSeries: [],
+            mixedCurrencies: false,
+            errors:
+              Array.isArray(data.errors) && data.errors.length > 0
+                ? data.errors
+                : [{ symbol: "*", message: errorMsg }],
+          },
+        }));
+        return;
+      }
       setResults((prev) => ({ ...prev, [group.id]: data }));
-    } catch {
+      maybeAutoFitRange(group, data);
+    } catch (err) {
       setResults((prev) => ({
         ...prev,
         [group.id]: {
@@ -319,7 +338,7 @@ export default function Home() {
           recommendations: [],
           chartSeries: [],
           mixedCurrencies: false,
-          errors: [{ symbol: "*", message: "network error" }],
+          errors: [{ symbol: "*", message: err instanceof Error ? err.message : "network error" }],
         },
       }));
     } finally {
@@ -330,6 +349,30 @@ export default function Home() {
   function scheduleRerun(group: ComparisonGroup) {
     if (debounceRef.current[group.id]) clearTimeout(debounceRef.current[group.id]);
     debounceRef.current[group.id] = setTimeout(() => runBacktest(group), DEBOUNCE_MS);
+  }
+
+  /**
+   * A group's first backtest snaps its range to the shared backtestable
+   * ceiling — the shortest symbol's history, e.g. 18.43y for a group held back
+   * by Visa's 2008 listing — so a saved comparison spans all the history it can
+   * instead of sitting at the 5-year default. Rounds UP (18.43 → 19) so no
+   * available history is left on the table; the backend caps the request to
+   * what actually exists. Runs once: `rangeFitted` is set here and by any
+   * manual slider move, and gates re-entry.
+   */
+  function maybeAutoFitRange(group: ComparisonGroup, data: BacktestResult) {
+    if (group.rangeFitted) return;
+    const ceilings = (data.metrics ?? [])
+      .map((m) => m.maxBacktestYears)
+      .filter((y): y is number => typeof y === "number" && y > 0);
+    if (ceilings.length === 0) return; // every symbol errored — try again next run
+    const fit = Math.min(RANGE_MAX, Math.max(RANGE_MIN, Math.ceil(Math.min(...ceilings))));
+    const fitted = { ...group, rangeYears: fit, rangeFitted: true };
+    if (fit === group.rangeYears) {
+      updateGroup(fitted); // already at the ceiling — just record that we checked
+      return;
+    }
+    updateGroup(fitted, { rerun: true });
   }
 
   function saveDraftAsGroup() {
@@ -343,6 +386,9 @@ export default function Home() {
       symbols: draftSymbols,
       createdAt: new Date().toISOString(),
       rangeYears,
+      // Left the draft slider at its default → let the first backtest fit the
+      // range to the data. Moved it → that's the choice, keep it.
+      rangeFitted: rangeYears !== DEFAULT_RANGE_YEARS,
       startValue,
     };
     upsertGroup(group).then((updated) => {
@@ -350,6 +396,7 @@ export default function Home() {
       setDraftTitle("");
       setDraftSymbols([]);
       setStartValue(1000);
+      setExpandedGroupId(group.id);
       runBacktest(group);
     });
   }
@@ -379,6 +426,10 @@ export default function Home() {
   function addSymbolToGroup(group: ComparisonGroup, sym: string) {
     const s = sym.trim().toUpperCase();
     if (!s || group.symbols.includes(s)) return;
+    if (group.symbols.length >= MAX_SYMBOLS_PER_GROUP) {
+      alert(T.maxSymbolsReached);
+      return;
+    }
     const updated = { ...group, symbols: [...group.symbols, s] };
     updateGroup(updated, { rerun: true });
     setEditQuery("");
@@ -398,7 +449,8 @@ export default function Home() {
   }
 
   function changeGroupRange(group: ComparisonGroup, years: number) {
-    const updated = { ...group, rangeYears: years };
+    // A hand-picked range is a settled choice: opt this group out of auto-fit.
+    const updated = { ...group, rangeYears: years, rangeFitted: true };
     updateGroup(updated, { rerun: true, debounce: true });
   }
 
@@ -407,12 +459,28 @@ export default function Home() {
     updateGroup(updated, { rerun: true, debounce: true });
   }
 
+  // Load saved groups once on mount and kick off a backtest for each. Declared
+  // after the functions it calls so those references aren't forward ones.
+  useEffect(() => {
+    loadGroups()
+      .then((loaded) => {
+        setGroups(loaded);
+        loaded.forEach((g) => {
+          if (g.symbols.length > 0) runBacktest(g);
+        });
+      })
+      .catch(() => setGroups([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
+      {/* Flat nav on the base canvas — no border, no shadow, and exactly one
+          filled pill, per the single-CTA pattern the system uses. */}
       <header>
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span aria-hidden className="text-lg font-semibold">=</span>
+            <span aria-hidden className="font-display text-2xl leading-none">=</span>
             <span className="font-display text-lg">{T.title}</span>
           </div>
           <button
@@ -424,28 +492,37 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="relative overflow-hidden hero-gradient">
-        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 pt-16 sm:pt-24 pb-16 sm:pb-24 text-center">
-          <h1 className="font-display text-4xl sm:text-6xl leading-tight text-white">
-            {T.title}
+      {/* Hero sits on the same warm canvas as everything else — the section is
+          set apart by whitespace and type size alone, not by a coloured band.
+          The gradient blocks are peripheral ornament: they echo a bar chart at
+          the margins and never sit behind text. */}
+      <div className="relative">
+        <PixelStack side="left" />
+        <PixelStack side="right" />
+        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 pt-20 sm:pt-28 pb-16 sm:pb-24 text-center">
+          <h1 className="hero-title">
+            {T.heroClaim}
+            <br />
+            <span className="headline-sub">{T.heroSub}</span>
           </h1>
-          <p className="text-base sm:text-lg mt-3 text-white/85 max-w-xl mx-auto">{T.subtitle}</p>
+          <p className="mt-6 max-w-xl mx-auto" style={{ color: "var(--foreground-muted)" }}>
+            {T.subtitle}
+          </p>
         </div>
       </div>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 flex flex-col gap-8">
         {/* New comparison builder */}
         <section className="card p-4 sm:p-6 flex flex-col gap-4">
-          <span className="eyebrow">1. {T.newComparison}</span>
-          <h2 className="font-display text-2xl">{T.newComparison}</h2>
+          <span className="eyebrow">1. {T.eyebrowBuild}</span>
+          <h2 className="font-display text-3xl sm:text-4xl">{T.newComparison}</h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input
               value={draftTitle}
               onChange={(e) => setDraftTitle(e.target.value)}
               placeholder={T.groupTitlePlaceholder}
-              className="border rounded-lg px-3 py-2 bg-white/70 sm:col-span-1"
-              style={{ borderColor: "var(--line)" }}
+              className="field px-3 py-2 sm:col-span-1"
             />
             <NumberField label={T.startValue} value={startValue} onCommit={setStartValue} min={1} step={100} />
           </div>
@@ -456,8 +533,7 @@ export default function Home() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={T.searchPlaceholder}
-                className="w-full border rounded-lg px-3 py-2 bg-white/70"
-                style={{ borderColor: "var(--line)" }}
+                className="field w-full px-3 py-2"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && query.trim()) addSymbol(query);
                 }}
@@ -465,7 +541,7 @@ export default function Home() {
               {query && suggestions.length > 0 && (
                 <ul
                   className="absolute z-10 mt-1 w-full card shadow-md max-h-64 overflow-auto"
-                  style={{ background: "var(--washi)" }}
+                  style={{ background: "var(--surface)" }}
                 >
                   {suggestions.map((s) => (
                     <li key={s.symbol}>
@@ -481,7 +557,7 @@ export default function Home() {
                 </ul>
               )}
             </div>
-            <button onClick={() => addSymbol(query)} className="btn-primary px-4 py-2 text-sm">
+            <button onClick={() => addSymbol(query)} className="btn-ghost px-4 py-2 text-sm">
               {T.addSymbol}
             </button>
           </div>
@@ -491,8 +567,7 @@ export default function Home() {
               {draftSymbols.map((s) => (
                 <span
                   key={s}
-                  className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm"
-                  style={{ background: "var(--line)" }}
+                  className="pill-badge px-3 py-1 text-sm"
                 >
                   <SymbolLabel symbol={s} lang={lang} />
                   <button onClick={() => removeDraftSymbol(s)} className="opacity-60 hover:opacity-100">
@@ -513,7 +588,7 @@ export default function Home() {
           <button
             onClick={saveDraftAsGroup}
             disabled={draftSymbols.length === 0}
-            className="btn-accent px-4 py-2 text-sm self-start disabled:opacity-40"
+            className="btn-primary px-4 py-2 text-sm self-start disabled:opacity-40"
           >
             {T.runBacktest}
           </button>
@@ -522,59 +597,133 @@ export default function Home() {
         {/* Saved groups */}
         <section className="flex flex-col gap-4">
           <div>
-            <span className="eyebrow">2. {T.savedGroups}</span>
-            <h2 className="font-display text-2xl mt-1">{T.savedGroups}</h2>
+            <span className="eyebrow">2. {T.eyebrowCompare}</span>
+            <h2 className="font-display text-3xl sm:text-4xl mt-2">{T.savedGroups}</h2>
           </div>
           {groups.length === 0 && <p className="text-sm" style={{ color: "var(--foreground-muted)" }}>{T.noGroups}</p>}
 
+          <div className="gallery-grid">
           {groups.map((g) => {
             const result = results[g.id];
             const isLoading = loadingId === g.id;
             const isEditing = editingGroupId === g.id;
+            const isExpanded = expandedGroupId === g.id;
+            const leader = result?.recommendations.find((r) => r.rank === 1);
+            const leaderMetrics = leader && result?.metrics.find((m) => m.symbol === leader.symbol);
             return (
-              <div key={g.id} className="card p-4 sm:p-6 flex flex-col gap-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="font-display text-xl">{g.title}</h3>
-                    {!isEditing && (
-                      <p className="text-xs mt-0.5" style={{ color: "var(--foreground-muted)" }}>
-                        {T.symbols}: {g.symbols.map((s) => displaySymbol(s, lang)).join(", ") || "—"}
-                      </p>
-                    )}
+              <div
+                key={g.id}
+                className={`card gallery-tile p-4 sm:p-5 flex flex-col gap-3${isExpanded ? " is-expanded" : ""}`}
+              >
+                {/* The tile itself is the expand/collapse control — clicking
+                    the header or the collapsed preview toggles it, so there's
+                    no separate button to hunt for. Only this header+preview
+                    region is clickable: the action row below stays outside it
+                    so Run/Delete keep working on their own click, and once
+                    expanded the tile is full of its own inputs and buttons
+                    that a card-wide click handler would fight with. */}
+                <div
+                  className="flex flex-col gap-3 cursor-pointer"
+                  onClick={() => setExpandedGroupId(isExpanded ? null : g.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setExpandedGroupId(isExpanded ? null : g.id);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isExpanded}
+                  aria-label={`${g.title} - ${isExpanded ? T.collapse : T.expand}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="font-display text-xl">{g.title}</h3>
+                      {!isEditing && (
+                        <p className="text-xs mt-0.5 truncate" style={{ color: "var(--foreground-muted)" }}>
+                          {g.symbols.map((s) => displaySymbol(s, lang)).join(", ") || "—"}
+                        </p>
+                      )}
+                    </div>
+                    <span aria-hidden className="text-xs shrink-0 opacity-50 mt-1">
+                      {isExpanded ? "▲" : "▼"}
+                    </span>
                   </div>
-                  <div className="flex gap-2 shrink-0">
+
+                  {/* Collapsed, a tile is a picture: the indexed curves, then the
+                      one line of prose that says who won. Everything that needs
+                      room — the editor, the controls, the metrics table — waits
+                      until the tile is opened. */}
+                  {!isExpanded && (
+                    <>
+                      {result?.chartSeries && result.chartSeries.length > 0 ? (
+                        <Sparkline series={result.chartSeries} mixedCurrencies={result.mixedCurrencies} />
+                      ) : (
+                        <div
+                          className="tile-placeholder"
+                          aria-hidden
+                          style={{ height: 64 }}
+                        />
+                      )}
+                      {leader && leaderMetrics ? (
+                        <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
+                          {T.leads}
+                          <span className="font-semibold" style={{ color: "var(--foreground)" }}>
+                            {displaySymbol(leader.symbol, lang)}
+                          </span>
+                          {" · "}
+                          <span
+                            className="tabular-nums"
+                            style={{ color: leaderMetrics.annualizedReturn >= 0 ? "var(--positive)" : "var(--negative)" }}
+                          >
+                            {leaderMetrics.annualizedReturn}%
+                          </span>
+                          {" "}
+                          {T.annualizedShort}
+                        </p>
+                      ) : (
+                        <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
+                          {T.notRunYet}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2 mt-auto pt-1">
+                  {isExpanded && (
                     <button
                       onClick={() => setEditingGroupId(isEditing ? null : g.id)}
-                      className="px-3 py-1.5 text-sm rounded-full border"
-                      style={{ borderColor: "var(--line)" }}
+                      className="btn-ghost px-3 py-1.5 text-sm"
                     >
                       {isEditing ? T.doneEditing : T.editSymbols}
                     </button>
-                    <button
-                      onClick={() => runBacktest(g)}
-                      className="btn-primary px-3 py-1.5 text-sm"
-                      disabled={isLoading || g.symbols.length === 0}
-                    >
-                      {isLoading ? T.running : T.runBacktest}
-                    </button>
-                    <button
-                      onClick={() => handleDelete(g.id)}
-                      className="px-3 py-1.5 text-sm rounded-full border"
-                      style={{ borderColor: "var(--line)" }}
-                    >
-                      {T.delete}
-                    </button>
-                  </div>
+                  )}
+                  <button
+                    onClick={() => {
+                      setExpandedGroupId(g.id);
+                      runBacktest(g);
+                    }}
+                    className="btn-primary px-3 py-1.5 text-sm disabled:opacity-40"
+                    disabled={isLoading || g.symbols.length === 0}
+                  >
+                    {isLoading ? T.running : T.runBacktest}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(g.id)}
+                    className="btn-ghost px-3 py-1.5 text-sm"
+                  >
+                    {T.delete}
+                  </button>
                 </div>
 
-                {isEditing && (
+                {isExpanded && isEditing && (
                   <div className="flex flex-col gap-3 rounded-lg p-3" style={{ background: "var(--background)" }}>
                     <div className="flex flex-wrap gap-2">
                       {g.symbols.map((s) => (
                         <span
                           key={s}
-                          className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm"
-                          style={{ background: "var(--line)" }}
+                          className="pill-badge px-3 py-1 text-sm"
                         >
                           <SymbolLabel symbol={s} lang={lang} />
                           <button
@@ -587,61 +736,71 @@ export default function Home() {
                       ))}
                       {g.symbols.length === 0 && <span className="text-xs opacity-50">—</span>}
                     </div>
-                    <div className="relative">
-                      <input
-                        value={editQuery}
-                        onChange={(e) => setEditQuery(e.target.value)}
-                        placeholder={T.addSymbolToGroup}
-                        className="w-full border rounded-lg px-3 py-2 bg-white/70 text-sm"
-                        style={{ borderColor: "var(--line)" }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && editQuery.trim()) addSymbolToGroup(g, editQuery);
-                        }}
-                      />
-                      {editQuery && editSuggestions.length > 0 && (
-                        <ul
-                          className="absolute z-10 mt-1 w-full card shadow-md max-h-64 overflow-auto"
-                          style={{ background: "var(--washi)" }}
-                        >
-                          {editSuggestions.map((s) => (
-                            <li key={s.symbol}>
-                              <button
-                                onClick={() => addSymbolToGroup(g, s.symbol)}
-                                className="w-full text-left px-3 py-2 hover:opacity-80 text-sm flex justify-between"
-                              >
-                                <span className="font-medium">{s.symbol}</span>
-                                <span className="opacity-70">{lang === "zh" ? s.name : s.nameEn}</span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          value={editQuery}
+                          onChange={(e) => setEditQuery(e.target.value)}
+                          placeholder={T.addSymbolToGroup}
+                          className="field w-full px-3 py-2 text-sm"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && editQuery.trim()) addSymbolToGroup(g, editQuery);
+                          }}
+                        />
+                        {editQuery && editSuggestions.length > 0 && (
+                          <ul
+                            className="absolute z-10 mt-1 w-full card shadow-md max-h-64 overflow-auto"
+                            style={{ background: "var(--surface)" }}
+                          >
+                            {editSuggestions.map((s) => (
+                              <li key={s.symbol}>
+                                <button
+                                  onClick={() => addSymbolToGroup(g, s.symbol)}
+                                  className="w-full text-left px-3 py-2 hover:opacity-80 text-sm flex justify-between"
+                                >
+                                  <span className="font-medium">{s.symbol}</span>
+                                  <span className="opacity-70">{lang === "zh" ? s.name : s.nameEn}</span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => editQuery.trim() && addSymbolToGroup(g, editQuery)}
+                        disabled={!editQuery.trim()}
+                        className="btn-ghost px-4 py-2 text-sm shrink-0 disabled:opacity-40"
+                      >
+                        {T.addSymbol}
+                      </button>
                     </div>
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                  <RangeSlider
-                    label={T.rangeYears}
-                    value={g.rangeYears}
-                    onChange={(years) => changeGroupRange(g, years)}
-                    unit={g.rangeYears === 1 ? T.year : T.years}
-                  />
-                  <NumberField
-                    label={T.startValue}
-                    value={g.startValue ?? 1000}
-                    onCommit={(v) => changeGroupStartValue(g, v)}
-                    min={1}
-                    step={100}
-                    className="w-full border rounded-lg px-3 py-2 bg-white/70 text-sm"
-                  />
-                </div>
+                {isExpanded && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                    <RangeSlider
+                      label={T.rangeYears}
+                      value={g.rangeYears}
+                      onChange={(years) => changeGroupRange(g, years)}
+                      unit={g.rangeYears === 1 ? T.year : T.years}
+                    />
+                    <NumberField
+                      label={T.startValue}
+                      value={g.startValue ?? 1000}
+                      onCommit={(v) => changeGroupStartValue(g, v)}
+                      min={1}
+                      step={100}
+                      className="field w-full px-3 py-2 text-sm"
+                    />
+                  </div>
+                )}
 
-                {result && (
+                {isExpanded && result && (
                   <div className="flex flex-col gap-4">
-                    {result.errors.length > 0 && (
+                    {(result.errors ?? []).length > 0 && (
                       <p className="text-xs" style={{ color: "var(--negative)" }}>
-                        {T.errorFetch}: {result.errors.map((e) => displaySymbol(e.symbol, lang)).join(", ")}
+                        {T.errorFetch}: {(result.errors ?? []).map((e) => displaySymbol(e.symbol, lang)).join(", ")}
                       </p>
                     )}
 
@@ -672,7 +831,7 @@ export default function Home() {
                       </div>
                     )}
 
-                    {result.metrics.length > 0 && (
+                    {(result.metrics ?? []).length > 0 && (
                       <div className="flex flex-col gap-3">
                         <div className="overflow-x-auto">
                           <MetricsTable metrics={result.metrics} T={T} lang={lang} />
@@ -692,7 +851,7 @@ export default function Home() {
                       </div>
                     )}
 
-                    {result.recommendations.length > 0 && (
+                    {(result.recommendations ?? []).length > 0 && (
                       <div>
                         <div
                           className="rounded-lg px-3 py-2 mb-3 text-xs"
@@ -703,12 +862,11 @@ export default function Home() {
                           <p className="mt-1">{T.scoreFormulaNote}</p>
                         </div>
                         <span className="eyebrow">{T.aiRecommendation}</span>
-                        <div className="flex flex-col gap-2 mt-2">
+                        <div className="mt-2">
                           {result.recommendations.map((r) => (
                             <div
                               key={r.symbol}
-                              className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3 rounded-lg px-3 py-2"
-                              style={{ background: "var(--background)" }}
+                              className="hairline-row flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3 py-3"
                             >
                               {/* Wider than the ticker alone needs: a Taiwan
                                   symbol carries its fund name here too. */}
@@ -716,7 +874,7 @@ export default function Home() {
                                 <span
                                   className="inline-flex items-center justify-center rounded-full text-xs font-semibold shrink-0"
                                   style={{
-                                    background: "var(--matsu)",
+                                    background: "var(--orchid-ink)",
                                     color: "#fff",
                                     width: "1.5rem",
                                     height: "1.5rem",
@@ -744,8 +902,52 @@ export default function Home() {
               </div>
             );
           })}
+          </div>
         </section>
       </main>
+
+      {/* Closing band and footer share one full-bleed orchid background with no
+          hard break between them. */}
+      <footer className="band-orchid mt-16">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
+          <p className="font-display text-3xl sm:text-4xl max-w-2xl">
+            {T.heroClaim}
+            <br />
+            <span className="headline-sub">{T.heroSub}</span>
+          </p>
+          <p
+            className="mt-8 max-w-2xl text-sm leading-relaxed"
+            style={{ color: "var(--foreground-muted)" }}
+          >
+            {T.footerDisclaimer}
+          </p>
+          <p className="mt-8 text-sm flex items-center gap-2">
+            <span aria-hidden className="font-display text-lg leading-none">=</span>
+            <span className="font-display">{T.title}</span>
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+/**
+ * Peripheral ornament for the hero margins: gradient bars stacked like a bar
+ * chart, alternating lavender and aqua with irregular widths so the column
+ * reads as data rather than as a pattern. Decorative only — hidden from
+ * assistive tech, and hidden outright below 1024px where there is no margin.
+ */
+function PixelStack({ side }: { side: "left" | "right" }) {
+  const widths = side === "left" ? [64, 40, 78, 30, 56] : [38, 70, 46, 80, 34];
+  return (
+    <div aria-hidden className="pixel-stack" style={{ [side]: "1.5rem" }}>
+      {widths.map((w, i) => (
+        <span
+          key={i}
+          className={`pixel-block ${i % 2 === 0 ? "pixel-block--lavender" : "pixel-block--aqua"}`}
+          style={{ width: w, alignSelf: side === "left" ? "flex-end" : "flex-start" }}
+        />
+      ))}
     </div>
   );
 }
@@ -764,7 +966,7 @@ function NumberField({
   onCommit,
   min,
   step = 1,
-  className = "w-full border rounded-lg px-3 py-2 bg-white/70",
+  className = "field w-full px-3 py-2",
 }: {
   label: string;
   value: number;
@@ -822,8 +1024,8 @@ function RangeSlider({
   value,
   onChange,
   unit,
-  min = 1,
-  max = 20,
+  min = RANGE_MIN,
+  max = RANGE_MAX,
 }: {
   label: string;
   value: number;
@@ -848,7 +1050,7 @@ function RangeSlider({
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full accent-current"
-        style={{ accentColor: "var(--matsu)" }}
+        style={{ accentColor: "var(--orchid-ink)" }}
       />
     </div>
   );
