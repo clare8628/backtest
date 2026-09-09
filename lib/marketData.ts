@@ -49,10 +49,25 @@ export function symbolCandidates(symbol: string): string[] {
   return [`${s}.TW`, `${s}.TWO`];
 }
 
+/**
+ * The ticker as Yahoo Finance's chart API wants it spelled.
+ *
+ * Class shares are written with a dot everywhere a human types them, and the
+ * catalog stores them that way — `BRK.B`, `BF.B` — but Yahoo's chart endpoint
+ * only answers to the hyphen form (`BRK-B`); the dot form comes back "No data
+ * found, symbol may be delisted". A US class-share ticker is letters, a dot,
+ * one letter; Taiwan symbols lead with digits and carry a `.TW`/`.TWO` suffix,
+ * so they never match and pass through untouched.
+ */
+export function toYahooSymbol(symbol: string): string {
+  const s = symbol.trim().toUpperCase();
+  return /^[A-Z]+\.[A-Z]$/.test(s) ? s.replace(".", "-") : s;
+}
+
 async function fetchFromYahoo(symbol: string, rangeYears: number): Promise<SymbolSeries> {
   const range = yearsToYahooRange(rangeYears);
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
-    symbol
+    toYahooSymbol(symbol)
   )}?range=${range}&interval=1d&events=div%2Csplit`;
 
   const res = await fetch(url, {
@@ -207,6 +222,9 @@ async function fetchFromStooq(symbol: string, rangeYears: number): Promise<Symbo
 
 export function toStooqSymbol(symbol: string): string {
   const s = symbol.trim().toLowerCase();
+  // A class share (`brk.b`) writes its class with a dot, but Stooq — like
+  // Yahoo — wants a hyphen and still needs the `.us` market suffix appended.
+  if (/^[a-z]+\.[a-z]$/.test(s)) return `${s.replace(".", "-")}.us`;
   // If it already contains a market suffix (e.g. .us, .tw), leave as-is.
   if (s.includes(".")) return s;
   return `${s}.us`;

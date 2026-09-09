@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev, incomeProfile } from "@/lib/backtest";
-import { parseStooqCsv, toStooqSymbol, splitsUnreported, isTaiwanListed, symbolCandidates } from "@/lib/marketData";
+import { parseStooqCsv, toStooqSymbol, toYahooSymbol, splitsUnreported, isTaiwanListed, symbolCandidates } from "@/lib/marketData";
 import { displaySymbol, fundSizeIn, getFundSize, nativeCurrencyOf } from "@/lib/symbolCatalog";
 import { PricePoint, BacktestMetrics } from "@/lib/types";
 
@@ -274,6 +274,24 @@ describe("toStooqSymbol", () => {
 
   it("preserves explicit market suffix", () => {
     expect(toStooqSymbol("2330.tw")).toBe("2330.tw");
+  });
+
+  it("hyphenates a class share and still appends .us", () => {
+    expect(toStooqSymbol("BRK.B")).toBe("brk-b.us");
+    expect(toStooqSymbol("BF.B")).toBe("bf-b.us");
+  });
+});
+
+describe("toYahooSymbol", () => {
+  it("hyphenates a class share Yahoo only answers to in hyphen form", () => {
+    expect(toYahooSymbol("BRK.B")).toBe("BRK-B");
+    expect(toYahooSymbol("bf.b")).toBe("BF-B");
+  });
+
+  it("leaves plain tickers and Taiwan symbols untouched", () => {
+    expect(toYahooSymbol("VOO")).toBe("VOO");
+    expect(toYahooSymbol("0050.TW")).toBe("0050.TW");
+    expect(toYahooSymbol("00687B.TWO")).toBe("00687B.TWO");
   });
 });
 
