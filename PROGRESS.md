@@ -100,3 +100,7 @@
 - 標的庫新增 9 檔美股短債 ETF（皆美國公債，AA+ 主權）：SGOV（iShares 0-3個月美國公債）、BIL（SPDR 1-3個月國庫券）、SHV（iShares 短期美債）、GBIL（GS Access 0-1年美債）、USFR / TFLO（浮動利率公債）、VGSH / SCHO / SPTS（短期美債）
   - expenseRatio 採各基金公告淨值（SGOV 為費用減免後 0.09%）；fundSizeSnapshot 從缺（FUND_SIZE_AS_OF 快照未重跑），UI 顯示破折號而非猜測值
 - 測試 77/77 通過、TypeScript 檢查通過、已部署 Cloudflare Workers（Version ID: ebf625c4-242a-4634-91a2-bd8b2f7b489d，HTTP 200）
+
+更新 (2026-09-09)：
+- 修復 BRK.B 類股抓取失敗：Yahoo/Stooq chart API 只認連字號形式（BRK-B），點號形式回「symbol may be delisted」。新增 toYahooSymbol()，US 類股票代號（字母.字母）於 Yahoo 與 Stooq 查詢時轉為連字號，目錄與 UI 仍顯示 BRK.B。
+- 測試 80/80 通過、tsc 通過、已部署 Cloudflare Workers（Version ID: 308f14df-5069-4c8e-8bde-b0791f07fad7），線上實測 BRK.B 回測 errors: []。
