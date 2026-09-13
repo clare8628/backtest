@@ -47,6 +47,7 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "VT", name: "Vanguard 全世界股票 ETF", nameEn: "Vanguard Total World Stock ETF", category: "ETF", expenseRatio: 0.07, fundSizeSnapshot: 97884921856 },
   { symbol: "SPY", name: "SPDR 標普500 ETF", nameEn: "SPDR S&P 500 ETF Trust", category: "ETF", expenseRatio: 0.0945, fundSizeSnapshot: 795306885120 },
   { symbol: "QQQ", name: "Invesco 那斯達克100 ETF", nameEn: "Invesco QQQ Trust", category: "ETF", expenseRatio: 0.20, fundSizeSnapshot: 452800643072 },
+  { symbol: "QQQI", name: "NEOS 那斯達克100高股息 ETF", nameEn: "NEOS Nasdaq 100 High Income ETF", category: "ETF", expenseRatio: 0.68 },
   { symbol: "TQQQ", name: "Invesco 那斯達克100 正3倍槓桿 ETF", nameEn: "Invesco QQQ Trust 3x Shares", category: "ETF", expenseRatio: 1.08, fundSizeSnapshot: 32831182848 },
   { symbol: "QLD", name: "Direxion 那斯達克100 正3倍槓桿 ETF", nameEn: "Direxion Daily Nasdaq-100 Bull 3x Shares", category: "ETF", expenseRatio: 1.01, fundSizeSnapshot: 12760278016 },
   { symbol: "UPRO", name: "ProShares 標普500 正3倍槓桿 ETF", nameEn: "ProShares Ultra Pro S&P 500 ETF", category: "ETF", expenseRatio: 1.01, fundSizeSnapshot: 5150206464 },
