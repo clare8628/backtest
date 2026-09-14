@@ -131,7 +131,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
   const innerH = height - padding.top - padding.bottom;
   const svgRef = useRef<SVGSVGElement | null>(null);
 
-  const [mode, setMode] = useState<ChartMode>("price");
+  const [mode, setMode] = useState<ChartMode>("index");
   const [scale, setScale] = useState<ChartScale>("linear");
   const [displayCurrency, setDisplayCurrency] = useState<Currency>("USD");
   const activeCurrency: Currency = mixedCurrencies ? displayCurrency : series[0]?.currency ?? "USD";
