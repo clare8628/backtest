@@ -275,6 +275,19 @@ export default function Home() {
   /** Which tile is open. One at a time: an open tile spans the whole grid row,
    *  so two of them would leave no gallery to come back to. */
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
+
+  function setExpandedWithUrl(id: string | null) {
+    setExpandedGroupId(id);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (id) {
+        url.searchParams.set("group", id);
+      } else {
+        url.searchParams.delete("group");
+      }
+      window.history.replaceState(null, "", url.toString());
+    }
+  }
   const [editQuery, setEditQuery] = useState("");
 
   const debounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -396,7 +409,7 @@ export default function Home() {
       setDraftTitle("");
       setDraftSymbols([]);
       setStartValue(1000);
-      setExpandedGroupId(group.id);
+      setExpandedWithUrl(group.id);
       runBacktest(group);
     });
   }
@@ -410,6 +423,7 @@ export default function Home() {
         return next;
       });
       if (editingGroupId === id) setEditingGroupId(null);
+      if (expandedGroupId === id) setExpandedWithUrl(null);
     });
   }
 
@@ -465,11 +479,25 @@ export default function Home() {
     loadGroups()
       .then((loaded) => {
         setGroups(loaded);
+        if (typeof window !== "undefined") {
+          const params = new URLSearchParams(window.location.search);
+          const initialGroupId = params.get("group");
+          if (initialGroupId && loaded.some((g) => g.id === initialGroupId)) {
+            setExpandedGroupId(initialGroupId);
+          }
+        }
         loaded.forEach((g) => {
           if (g.symbols.length > 0) runBacktest(g);
         });
       })
       .catch(() => setGroups([]));
+
+    function handlePopState() {
+      const params = new URLSearchParams(window.location.search);
+      setExpandedGroupId(params.get("group"));
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -624,11 +652,11 @@ export default function Home() {
                     that a card-wide click handler would fight with. */}
                 <div
                   className="flex flex-col gap-3 cursor-pointer"
-                  onClick={() => setExpandedGroupId(isExpanded ? null : g.id)}
+                  onClick={() => setExpandedWithUrl(isExpanded ? null : g.id)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      setExpandedGroupId(isExpanded ? null : g.id);
+                      setExpandedWithUrl(isExpanded ? null : g.id);
                     }
                   }}
                   role="button"
@@ -701,7 +729,7 @@ export default function Home() {
                   )}
                   <button
                     onClick={() => {
-                      setExpandedGroupId(g.id);
+                      setExpandedWithUrl(g.id);
                       runBacktest(g);
                     }}
                     className="btn-primary px-3 py-1.5 text-sm disabled:opacity-40"
