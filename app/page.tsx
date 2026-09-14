@@ -634,99 +634,90 @@ export default function Home() {
           {groups.map((g) => {
             const result = results[g.id];
             const isLoading = loadingId === g.id;
-            const isEditing = editingGroupId === g.id;
-            const isExpanded = expandedGroupId === g.id;
+            const isSelected = expandedGroupId === g.id;
             const leader = result?.recommendations.find((r) => r.rank === 1);
             const leaderMetrics = leader && result?.metrics.find((m) => m.symbol === leader.symbol);
             return (
               <div
                 key={g.id}
-                className={`card gallery-tile p-4 sm:p-5 flex flex-col gap-3${isExpanded ? " is-expanded" : ""}`}
+                className={`card gallery-tile p-4 sm:p-5 flex flex-col gap-3${isSelected ? " is-active" : ""}`}
               >
-                {/* The tile itself is the expand/collapse control — clicking
-                    the header or the collapsed preview toggles it, so there's
-                    no separate button to hunt for. Only this header+preview
-                    region is clickable: the action row below stays outside it
-                    so Run/Delete keep working on their own click, and once
-                    expanded the tile is full of its own inputs and buttons
-                    that a card-wide click handler would fight with. */}
                 <div
-                  className="flex flex-col gap-3 cursor-pointer"
-                  onClick={() => setExpandedWithUrl(isExpanded ? null : g.id)}
+                  className="flex flex-col gap-3 cursor-pointer flex-1"
+                  onClick={() => setExpandedWithUrl(isSelected ? null : g.id)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      setExpandedWithUrl(isExpanded ? null : g.id);
+                      setExpandedWithUrl(isSelected ? null : g.id);
                     }
                   }}
                   role="button"
                   tabIndex={0}
-                  aria-expanded={isExpanded}
-                  aria-label={`${g.title} - ${isExpanded ? T.collapse : T.expand}`}
+                  aria-expanded={isSelected}
+                  aria-label={`${g.title} - ${isSelected ? T.collapse : T.expand}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h3 className="font-display text-xl">{g.title}</h3>
-                      {!isEditing && (
-                        <p className="text-xs mt-0.5 truncate" style={{ color: "var(--foreground-muted)" }}>
-                          {g.symbols.map((s) => displaySymbol(s, lang)).join(", ") || "—"}
-                        </p>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-display text-xl truncate">{g.title}</h3>
+                        {isSelected && (
+                          <span
+                            className="px-2 py-0.5 text-[11px] font-medium rounded-full shrink-0"
+                            style={{ background: "var(--orchid-band)", color: "var(--orchid-ink)" }}
+                          >
+                            {lang === "zh" ? "檢視中" : "Inspecting"}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs mt-0.5 truncate" style={{ color: "var(--foreground-muted)" }}>
+                        {g.symbols.map((s) => displaySymbol(s, lang)).join(", ") || "—"}
+                      </p>
                     </div>
-                    <span aria-hidden className="text-xs shrink-0 opacity-50 mt-1">
-                      {isExpanded ? "▲" : "▼"}
+                    <span
+                      aria-hidden
+                      className="text-xs shrink-0 mt-1 px-2 py-1 rounded"
+                      style={{
+                        background: isSelected ? "var(--orchid-band)" : "transparent",
+                        color: isSelected ? "var(--orchid-ink)" : "var(--foreground-muted)",
+                      }}
+                    >
+                      {isSelected ? T.collapse : T.expand}
                     </span>
                   </div>
 
-                  {/* Collapsed, a tile is a picture: the indexed curves, then the
-                      one line of prose that says who won. Everything that needs
-                      room — the editor, the controls, the metrics table — waits
-                      until the tile is opened. */}
-                  {!isExpanded && (
-                    <>
-                      {result?.chartSeries && result.chartSeries.length > 0 ? (
-                        <Sparkline series={result.chartSeries} mixedCurrencies={result.mixedCurrencies} />
-                      ) : (
-                        <div
-                          className="tile-placeholder"
-                          aria-hidden
-                          style={{ height: 64 }}
-                        />
-                      )}
-                      {leader && leaderMetrics ? (
-                        <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
-                          {T.leads}
-                          <span className="font-semibold" style={{ color: "var(--foreground)" }}>
-                            {displaySymbol(leader.symbol, lang)}
-                          </span>
-                          {" · "}
-                          <span
-                            className="tabular-nums"
-                            style={{ color: leaderMetrics.annualizedReturn >= 0 ? "var(--positive)" : "var(--negative)" }}
-                          >
-                            {leaderMetrics.annualizedReturn}%
-                          </span>
-                          {" "}
-                          {T.annualizedShort}
-                        </p>
-                      ) : (
-                        <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
-                          {T.notRunYet}
-                        </p>
-                      )}
-                    </>
+                  {result?.chartSeries && result.chartSeries.length > 0 ? (
+                    <Sparkline series={result.chartSeries} mixedCurrencies={result.mixedCurrencies} />
+                  ) : (
+                    <div
+                      className="tile-placeholder"
+                      aria-hidden
+                      style={{ height: 64 }}
+                    />
+                  )}
+                  {leader && leaderMetrics ? (
+                    <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
+                      {T.leads}
+                      <span className="font-semibold" style={{ color: "var(--foreground)" }}>
+                        {displaySymbol(leader.symbol, lang)}
+                      </span>
+                      {" · "}
+                      <span
+                        className="tabular-nums"
+                        style={{ color: leaderMetrics.annualizedReturn >= 0 ? "var(--positive)" : "var(--negative)" }}
+                      >
+                        {leaderMetrics.annualizedReturn}%
+                      </span>
+                      {" "}
+                      {T.annualizedShort}
+                    </p>
+                  ) : (
+                    <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
+                      {T.notRunYet}
+                    </p>
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-2 mt-auto pt-1">
-                  {isExpanded && (
-                    <button
-                      onClick={() => setEditingGroupId(isEditing ? null : g.id)}
-                      className="btn-ghost px-3 py-1.5 text-sm"
-                    >
-                      {isEditing ? T.doneEditing : T.editSymbols}
-                    </button>
-                  )}
+                <div className="flex flex-wrap gap-2 mt-auto pt-2 border-t" style={{ borderColor: "var(--line)" }}>
                   <button
                     onClick={() => {
                       setExpandedWithUrl(g.id);
@@ -744,9 +735,65 @@ export default function Home() {
                     {T.delete}
                   </button>
                 </div>
+              </div>
+            );
+          })}
+          </div>
+        </section>
 
-                {isExpanded && isEditing && (
-                  <div className="flex flex-col gap-3 rounded-lg p-3" style={{ background: "var(--background)" }}>
+        {/* Section 3: In-Depth Comparison Analysis (Workbench) */}
+        {expandedGroupId && (() => {
+          const g = groups.find((item) => item.id === expandedGroupId);
+          if (!g) return null;
+          const result = results[g.id];
+          const isLoading = loadingId === g.id;
+          const isEditing = editingGroupId === g.id;
+
+          return (
+            <section className="flex flex-col gap-4 mt-2">
+              <div className="flex items-end justify-between gap-4 flex-wrap">
+                <div>
+                  <span className="eyebrow">3. {T.eyebrowInspect}</span>
+                  <h2 className="font-display text-3xl sm:text-4xl mt-2">{T.detailedAnalysis}</h2>
+                </div>
+                <button
+                  onClick={() => setExpandedWithUrl(null)}
+                  className="btn-ghost px-4 py-2 text-sm flex items-center gap-1.5 self-start sm:self-auto"
+                >
+                  <span>✕</span>
+                  <span>{T.closeInspection}</span>
+                </button>
+              </div>
+
+              <div className="workbench-panel p-5 sm:p-7 flex flex-col gap-6">
+                {/* Header info & action bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b" style={{ borderColor: "var(--line)" }}>
+                  <div className="min-w-0">
+                    <h3 className="font-display text-2xl sm:text-3xl">{g.title}</h3>
+                    <p className="text-sm mt-1" style={{ color: "var(--foreground-muted)" }}>
+                      {g.symbols.map((s) => displaySymbol(s, lang)).join(" · ") || "—"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 shrink-0">
+                    <button
+                      onClick={() => setEditingGroupId(isEditing ? null : g.id)}
+                      className="btn-ghost px-3.5 py-1.5 text-sm"
+                    >
+                      {isEditing ? T.doneEditing : T.editSymbols}
+                    </button>
+                    <button
+                      onClick={() => runBacktest(g)}
+                      className="btn-primary px-4 py-1.5 text-sm disabled:opacity-40"
+                      disabled={isLoading || g.symbols.length === 0}
+                    >
+                      {isLoading ? T.running : T.runBacktest}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Edit symbols bar */}
+                {isEditing && (
+                  <div className="flex flex-col gap-3 rounded-lg p-4" style={{ background: "var(--background)", border: "1px solid var(--line)" }}>
                     <div className="flex flex-wrap gap-2">
                       {g.symbols.map((s) => (
                         <span
@@ -805,27 +852,27 @@ export default function Home() {
                   </div>
                 )}
 
-                {isExpanded && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                    <RangeSlider
-                      label={T.rangeYears}
-                      value={g.rangeYears}
-                      onChange={(years) => changeGroupRange(g, years)}
-                      unit={g.rangeYears === 1 ? T.year : T.years}
-                    />
-                    <NumberField
-                      label={T.startValue}
-                      value={g.startValue ?? 1000}
-                      onCommit={(v) => changeGroupStartValue(g, v)}
-                      min={1}
-                      step={100}
-                      className="field w-full px-3 py-2 text-sm"
-                    />
-                  </div>
-                )}
+                {/* Range and initial capital controllers */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end p-4 rounded-lg" style={{ background: "var(--background)", border: "1px solid var(--line)" }}>
+                  <RangeSlider
+                    label={T.rangeYears}
+                    value={g.rangeYears}
+                    onChange={(years) => changeGroupRange(g, years)}
+                    unit={g.rangeYears === 1 ? T.year : T.years}
+                  />
+                  <NumberField
+                    label={T.startValue}
+                    value={g.startValue ?? 1000}
+                    onCommit={(v) => changeGroupStartValue(g, v)}
+                    min={1}
+                    step={100}
+                    className="field w-full px-3 py-2 text-sm"
+                  />
+                </div>
 
-                {isExpanded && result && (
-                  <div className="flex flex-col gap-4">
+                {/* Analysis results */}
+                {result && (
+                  <div className="flex flex-col gap-6">
                     {(result.errors ?? []).length > 0 && (
                       <p className="text-xs" style={{ color: "var(--negative)" }}>
                         {T.errorFetch}: {(result.errors ?? []).map((e) => displaySymbol(e.symbol, lang)).join(", ")}
@@ -896,8 +943,6 @@ export default function Home() {
                               key={r.symbol}
                               className="hairline-row flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3 py-3"
                             >
-                              {/* Wider than the ticker alone needs: a Taiwan
-                                  symbol carries its fund name here too. */}
                               <div className="flex items-center gap-2 sm:w-56 shrink-0">
                                 <span
                                   className="inline-flex items-center justify-center rounded-full text-xs font-semibold shrink-0"
@@ -928,10 +973,9 @@ export default function Home() {
                   </div>
                 )}
               </div>
-            );
-          })}
-          </div>
-        </section>
+            </section>
+          );
+        })()}
       </main>
 
       {/* Closing band and footer share one full-bleed orchid background with no
