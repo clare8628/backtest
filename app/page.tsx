@@ -377,19 +377,38 @@ export default function Home() {
    * what actually exists. Runs once: `rangeFitted` is set here and by any
    * manual slider move, and gates re-entry.
    */
+  /**
+   * Snaps the group's range to the shared backtestable ceiling — the shortest
+   * symbol's history (e.g. QQQI ~1.5y, SPMO ~8.8y, or 00940 ~1y) — so the backtest
+   * never exceeds the shortest available history within the group.
+   * If a group's current rangeYears exceeds this ceiling, it is automatically capped
+   * down to match the shortest symbol's available years (minimum RANGE_MIN = 1).
+   * For a brand-new group (!rangeFitted), it snaps directly to this ceiling.
+   */
   function maybeAutoFitRange(group: ComparisonGroup, data: BacktestResult) {
-    if (group.rangeFitted) return;
     const ceilings = (data.metrics ?? [])
       .map((m) => m.maxBacktestYears)
       .filter((y): y is number => typeof y === "number" && y > 0);
     if (ceilings.length === 0) return; // every symbol errored — try again next run
-    const fit = Math.min(RANGE_MAX, Math.max(RANGE_MIN, Math.ceil(Math.min(...ceilings))));
-    const fitted = { ...group, rangeYears: fit, rangeFitted: true };
-    if (fit === group.rangeYears) {
-      updateGroup(fitted); // already at the ceiling — just record that we checked
+    const maxAvailable = Math.min(RANGE_MAX, Math.max(RANGE_MIN, Math.ceil(Math.min(...ceilings))));
+
+    if (!group.rangeFitted) {
+      const fit = maxAvailable;
+      const fitted = { ...group, rangeYears: fit, rangeFitted: true };
+      if (fit === group.rangeYears) {
+        updateGroup(fitted);
+        return;
+      }
+      updateGroup(fitted, { rerun: true });
       return;
     }
-    updateGroup(fitted, { rerun: true });
+
+    // Even if rangeFitted (user adjusted or previous fit), if current range exceeds the shortest symbol ceiling,
+    // clamp it down automatically to the shortest symbol's max ceiling.
+    if (group.rangeYears > maxAvailable) {
+      const fitted = { ...group, rangeYears: maxAvailable };
+      updateGroup(fitted, { rerun: true });
+    }
   }
 
   function saveDraftAsGroup() {
@@ -754,6 +773,13 @@ export default function Home() {
           const isLoading = loadingId === g.id;
           const isEditing = editingGroupId === g.id;
 
+          const ceilings = (result?.metrics ?? [])
+            .map((m) => m.maxBacktestYears)
+            .filter((y): y is number => typeof y === "number" && y > 0);
+          const maxGroupYears = ceilings.length > 0
+            ? Math.min(RANGE_MAX, Math.max(RANGE_MIN, Math.ceil(Math.min(...ceilings))))
+            : RANGE_MAX;
+
           return (
             <section className="flex flex-col gap-4 mt-2">
               <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -864,6 +890,7 @@ export default function Home() {
                     value={g.rangeYears}
                     onChange={(years) => changeGroupRange(g, years)}
                     unit={g.rangeYears === 1 ? T.year : T.years}
+                    max={maxGroupYears}
                   />
                   <NumberField
                     label={T.startValue}
@@ -1111,20 +1138,23 @@ function RangeSlider({
   min?: number;
   max?: number;
 }) {
+  const safeMax = Math.max(min, max);
+  const clampedValue = Math.min(safeMax, Math.max(min, value));
+
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between text-sm">
         <label className="opacity-70">{label}</label>
         <span className="font-medium">
-          {value} {unit}
+          {clampedValue} {unit}
         </span>
       </div>
       <input
         type="range"
         min={min}
-        max={max}
+        max={safeMax}
         step={1}
-        value={value}
+        value={clampedValue}
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full accent-current"
         style={{ accentColor: "var(--orchid-ink)" }}
