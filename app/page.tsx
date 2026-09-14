@@ -639,8 +639,9 @@ export default function Home() {
             const result = results[g.id];
             const isLoading = loadingId === g.id;
             const isSelected = expandedGroupId === g.id;
-            const leader = result?.recommendations.find((r) => r.rank === 1);
-            const leaderMetrics = leader && result?.metrics.find((m) => m.symbol === leader.symbol);
+            const topMetric = result?.metrics && result.metrics.length > 0
+              ? [...result.metrics].sort((a, b) => b.annualizedReturn - a.annualizedReturn)[0]
+              : null;
             return (
               <div
                 key={g.id}
@@ -698,18 +699,18 @@ export default function Home() {
                       style={{ height: 64 }}
                     />
                   )}
-                  {leader && leaderMetrics ? (
+                  {topMetric ? (
                     <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
                       {T.leads}
                       <span className="font-semibold" style={{ color: "var(--foreground)" }}>
-                        {displaySymbol(leader.symbol, lang)}
+                        {displaySymbol(topMetric.symbol, lang)}
                       </span>
                       {" · "}
                       <span
                         className="tabular-nums"
-                        style={{ color: leaderMetrics.annualizedReturn >= 0 ? "var(--positive)" : "var(--negative)" }}
+                        style={{ color: topMetric.annualizedReturn >= 0 ? "var(--positive)" : "var(--negative)" }}
                       >
-                        {leaderMetrics.annualizedReturn}%
+                        {topMetric.annualizedReturn}%
                       </span>
                       {" "}
                       {T.annualizedShort}
