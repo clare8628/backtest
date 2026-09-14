@@ -232,18 +232,18 @@ function MetricsTable({ metrics, T, lang }: { metrics: BacktestMetrics[]; T: Dic
               </td>
             </tr>
             {section.rows.map((row) => (
-              <tr key={row.label} className="border-t" style={{ borderColor: "var(--line)" }}>
+              <tr key={row.label} className="metrics-row border-t cursor-default" style={{ borderColor: "var(--line)" }}>
                 <th
                   scope="row"
-                  className="py-1.5 pr-4 text-left text-xs font-normal"
+                  className="py-2 pl-2 pr-4 text-left text-xs font-normal rounded-l"
                   style={{ color: "var(--foreground-muted)" }}
                 >
                   {row.label}
                 </th>
-                {metrics.map((m) => (
+                {metrics.map((m, idx) => (
                   <td
                     key={m.symbol}
-                    className="py-1.5 px-2 text-right tabular-nums"
+                    className={`py-2 px-2 text-right tabular-nums${idx === metrics.length - 1 ? " pr-2 rounded-r" : ""}`}
                     style={{ color: row.color?.(m) }}
                   >
                     {row.value(m)}

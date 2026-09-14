@@ -196,6 +196,31 @@ h3,
   font-size: calc(12px * 1.331); /* 12px * 1.331 = 15.972px */
 }
 
+/* Row hover highlight to easily trace across columns on wide screens */
+.metrics-row {
+  transition: background-color 0.12s ease;
+}
+
+.metrics-row:hover {
+  background-color: rgba(176, 116, 206, 0.08); /* subtle orchid tint */
+}
+
+.metrics-row:hover th {
+  color: var(--foreground) !important;
+  font-weight: 500;
+}
+
+.hairline-row {
+  transition: background-color 0.12s ease;
+  border-radius: 6px;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.hairline-row:hover {
+  background-color: rgba(176, 116, 206, 0.08);
+}
+
 /* Cards hold real product chrome (tables, charts) — white, hairline, barely
  * lifted. The shadow is a sheet of paper on a desk, not an elevation level. */
 .card {
