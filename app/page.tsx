@@ -467,14 +467,18 @@ export default function Home() {
       alert(T.maxSymbolsReached);
       return;
     }
-    const updated = { ...group, symbols: [...group.symbols, s] };
+    // Reset rangeFitted so maybeAutoFitRange will re-snap and calibrate
+    // the slider and backtest range to the group's new shortest symbol ceiling.
+    const updated = { ...group, symbols: [...group.symbols, s], rangeFitted: false };
     updateGroup(updated, { rerun: true });
     setEditQuery("");
   }
 
   function removeSymbolFromGroup(group: ComparisonGroup, sym: string) {
     const nextSymbols = group.symbols.filter((s) => s !== sym);
-    const updated = { ...group, symbols: nextSymbols };
+    // Reset rangeFitted so maybeAutoFitRange will re-snap and calibrate
+    // the slider and backtest range to the remaining shortest symbol ceiling.
+    const updated = { ...group, symbols: nextSymbols, rangeFitted: false };
     updateGroup(updated, { rerun: nextSymbols.length > 0 });
     if (nextSymbols.length === 0) {
       setResults((prev) => {
