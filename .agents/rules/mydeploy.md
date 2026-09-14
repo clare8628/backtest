@@ -2,4 +2,4 @@
 trigger: always_on
 ---
 
-自動完成部署至cloudflare
+本專案所有調整自動推送到github
