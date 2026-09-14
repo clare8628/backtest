@@ -50,7 +50,7 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "QQQI", name: "NEOS 那斯達克100高股息 ETF", nameEn: "NEOS Nasdaq 100 High Income ETF", category: "ETF", expenseRatio: 0.68 },
   { symbol: "SPMO", name: "Invesco 標普500動能 ETF", nameEn: "Invesco S&P 500 Momentum ETF", category: "ETF", expenseRatio: 0.13 },
   { symbol: "TQQQ", name: "Invesco 那斯達克100 正3倍槓桿 ETF", nameEn: "Invesco QQQ Trust 3x Shares", category: "ETF", expenseRatio: 1.08, fundSizeSnapshot: 32831182848 },
-  { symbol: "QLD", name: "Direxion 那斯達克100 正3倍槓桿 ETF", nameEn: "Direxion Daily Nasdaq-100 Bull 3x Shares", category: "ETF", expenseRatio: 1.01, fundSizeSnapshot: 12760278016 },
+  { symbol: "QLD", name: "ProShares 那斯達克100 正2倍槓桿 ETF", nameEn: "ProShares Ultra QQQ", category: "ETF", expenseRatio: 0.95, fundSizeSnapshot: 12760278016 },
   { symbol: "UPRO", name: "ProShares 標普500 正3倍槓桿 ETF", nameEn: "ProShares Ultra Pro S&P 500 ETF", category: "ETF", expenseRatio: 1.01, fundSizeSnapshot: 5150206464 },
   { symbol: "SSO", name: "ProShares 標普500 正2倍槓桿 ETF", nameEn: "ProShares Ultra S&P 500 ETF", category: "ETF", expenseRatio: 0.91, fundSizeSnapshot: 7808743424 },
   { symbol: "VTI", name: "Vanguard 全美股市 ETF", nameEn: "Vanguard Total Stock Market ETF", category: "ETF", expenseRatio: 0.03, fundSizeSnapshot: 2289978572800 },
