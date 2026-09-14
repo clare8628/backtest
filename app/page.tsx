@@ -208,12 +208,16 @@ function metricSections(T: Dict, lang: Lang): { title: string; rows: MetricRow[]
 
 function MetricsTable({ metrics, T, lang }: { metrics: BacktestMetrics[]; T: Dict; lang: Lang }) {
   const sections = metricSections(T, lang);
+  const sortedMetrics = useMemo(() => {
+    return [...metrics].sort((a, b) => (b.totalReturn ?? 0) - (a.totalReturn ?? 0));
+  }, [metrics]);
+
   return (
     <table className="w-full border-collapse metrics-table">
       <thead>
         <tr style={{ color: "var(--foreground-muted)" }}>
           <th className="py-1 pr-4 text-left font-normal">{T.metric}</th>
-          {metrics.map((m) => (
+          {sortedMetrics.map((m) => (
             <th key={m.symbol} className="py-1 px-2 text-right font-medium" style={{ color: "var(--foreground)" }}>
               <SymbolLabel symbol={m.symbol} lang={lang} />
             </th>
@@ -225,7 +229,7 @@ function MetricsTable({ metrics, T, lang }: { metrics: BacktestMetrics[]; T: Dic
           <Fragment key={section.title}>
             <tr>
               <td
-                colSpan={metrics.length + 1}
+                colSpan={sortedMetrics.length + 1}
                 className="table-group pt-4 pb-1"
               >
                 {section.title}
@@ -240,10 +244,10 @@ function MetricsTable({ metrics, T, lang }: { metrics: BacktestMetrics[]; T: Dic
                 >
                   {row.label}
                 </th>
-                {metrics.map((m, idx) => (
+                {sortedMetrics.map((m, idx) => (
                   <td
                     key={m.symbol}
-                    className={`py-2 px-2 text-right tabular-nums${idx === metrics.length - 1 ? " pr-2 rounded-r" : ""}`}
+                    className={`py-2 px-2 text-right tabular-nums${idx === sortedMetrics.length - 1 ? " pr-2 rounded-r" : ""}`}
                     style={{ color: row.color?.(m) }}
                   >
                     {row.value(m)}
