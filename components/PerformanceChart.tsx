@@ -126,13 +126,14 @@ function yAxisLabel(mode: ChartMode, currency: Currency, lang: Lang): string {
 export default function PerformanceChart({ series, mixedCurrencies, lang, height = 280 }: Props) {
   const T = t(lang);
   const width = 640;
-  const padding = { top: 24, right: 12, bottom: 28, left: 56 };
+  const padding = { top: 24, right: 56, bottom: 28, left: 56 };
   const innerW = width - padding.left - padding.right;
   const innerH = height - padding.top - padding.bottom;
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   const [mode, setMode] = useState<ChartMode>("index");
   const [scale, setScale] = useState<ChartScale>("linear");
+  const [justToggledScale, setJustToggledScale] = useState<boolean>(false);
   const [displayCurrency, setDisplayCurrency] = useState<Currency>("USD");
   const activeCurrency: Currency = mixedCurrencies ? displayCurrency : series[0]?.currency ?? "USD";
 
@@ -328,21 +329,37 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
             </button>
           ))}
         </div>
-        <div className="flex gap-1">
-          {(["linear", "log"] as ChartScale[]).map((s) => (
-            <button
-              key={s}
-              onClick={() => setScale(s)}
-              className="px-3 py-1 rounded-full"
-              style={{
-                border: "1px solid var(--line)",
-                background: scale === s ? "var(--orchid-ink)" : "transparent",
-                color: scale === s ? "white" : "inherit",
-              }}
-            >
-              {s === "linear" ? T.scaleLinear : T.scaleLog}
-            </button>
-          ))}
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex gap-1">
+            {(["linear", "log"] as ChartScale[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => {
+                  setScale(s);
+                  setJustToggledScale(true);
+                  setTimeout(() => setJustToggledScale(false), 800);
+                }}
+                className="px-3 py-1 rounded-full transition-colors"
+                style={{
+                  border: "1px solid var(--line)",
+                  background: scale === s ? "var(--orchid-ink)" : "transparent",
+                  color: scale === s ? "white" : "inherit",
+                }}
+              >
+                {s === "linear" ? T.scaleLinear : T.scaleLog}
+              </button>
+            ))}
+          </div>
+          <span
+            className="text-[10px] tracking-tight transition-opacity duration-300"
+            style={{
+              color: scale === "log" ? "var(--orchid-ink)" : "currentColor",
+              opacity: scale === "log" ? 0.95 : 0.6,
+              fontWeight: scale === "log" ? 500 : 400,
+            }}
+          >
+            {scale === "linear" ? `← ${T.scaleGuideLinear}` : `${T.scaleGuideLog} →`}
+          </span>
         </div>
         {mixedCurrencies && (
           <div className="flex gap-1">
@@ -375,13 +392,34 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
           onMouseMove={handleMove}
           onMouseLeave={() => setHoverT(null)}
         >
-          {/* persistent y-axis title — always visible, not just on hover, so the
-              unit (real price vs. index) is never ambiguous at a glance */}
-          <text x={padding.left} y={12} fontSize={9.5} fontWeight={600} fill="currentColor" opacity={0.75}>
+          {/* persistent left y-axis title (absolute amount / points) */}
+          <text
+            x={padding.left}
+            y={12}
+            fontSize={9.5}
+            fontWeight={scale === "linear" ? 700 : 500}
+            fill={scale === "linear" ? "var(--orchid-ink)" : "currentColor"}
+            opacity={scale === "linear" ? 0.95 : 0.4}
+            className={`transition-all duration-500 ${justToggledScale && scale === "linear" ? "animate-pulse" : ""}`}
+          >
             {yAxisLabel(mode, activeCurrency, lang)}
           </text>
 
-          {/* y grid + value labels */}
+          {/* persistent right y-axis title (% change / ratio) */}
+          <text
+            x={width - 4}
+            y={12}
+            fontSize={9.5}
+            fontWeight={scale === "log" ? 700 : 500}
+            textAnchor="end"
+            fill={scale === "log" ? "var(--orchid-ink)" : "currentColor"}
+            opacity={scale === "log" ? 0.95 : 0.35}
+            className={`transition-all duration-500 ${justToggledScale && scale === "log" ? "animate-pulse" : ""}`}
+          >
+            {T.logScaleRightAxis}
+          </text>
+
+          {/* y grid + value labels (left absolute, right percentage) */}
           {Array.from({ length: gridLines + 1 }).map((_, i) => {
             // Log-spaced grid values land at evenly spaced pixel rows under yFor's
             // log transform, the same way linear-spaced values do under linear.
@@ -390,11 +428,39 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
                 ? yMin * Math.pow(yMax / yMin, i / gridLines)
                 : yMin + ((yMax - yMin) * i) / gridLines;
             const y = yFor(v);
+
+            // Compute right-axis percentage change
+            const baseForPct = mode === "index" ? 100 : (plotted[0]?.points[0]?.value || 1);
+            const pct = ((v - baseForPct) / (baseForPct || 1)) * 100;
+            const pctText = (pct > 0 ? "+" : "") + pct.toFixed(Math.abs(pct) >= 100 ? 0 : 1) + "%";
+
             return (
               <g key={i}>
                 <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="var(--line)" strokeWidth={1} />
-                <text x={4} y={y + 3} fontSize={9} fill="currentColor" opacity={0.6}>
+                {/* Left axis: absolute amount or index value */}
+                <text
+                  x={4}
+                  y={y + 3}
+                  fontSize={9}
+                  fontWeight={scale === "linear" ? 600 : 400}
+                  fill={scale === "linear" ? "currentColor" : "currentColor"}
+                  opacity={scale === "linear" ? 0.85 : 0.35}
+                  className="transition-opacity duration-300"
+                >
                   {formatValue(v, mode, activeCurrency)}
+                </text>
+                {/* Right axis: percentage change (%) */}
+                <text
+                  x={width - 4}
+                  y={y + 3}
+                  fontSize={9}
+                  textAnchor="end"
+                  fontWeight={scale === "log" ? 600 : 400}
+                  fill={scale === "log" ? "var(--orchid-ink)" : "currentColor"}
+                  opacity={scale === "log" ? 0.9 : 0.3}
+                  className="transition-opacity duration-300"
+                >
+                  {pctText}
                 </text>
               </g>
             );
