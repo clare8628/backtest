@@ -534,9 +534,20 @@ export default function Home() {
           filled pill, per the single-CTA pattern the system uses. */}
       <header>
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <span aria-hidden className="font-display text-2xl leading-none">=</span>
             <span className="font-display text-lg">{T.title}</span>
+            <span
+              className="text-[11px] font-mono px-2 py-0.5 rounded-full font-medium"
+              style={{
+                background: "var(--orchid-band)",
+                color: "var(--orchid-ink)",
+                border: "1px solid rgba(142, 79, 174, 0.2)",
+              }}
+              title="Version 0.2.0"
+            >
+              v0.2.0
+            </span>
           </div>
           <button
             onClick={() => setLang(lang === "zh" ? "en" : "zh")}
