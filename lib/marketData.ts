@@ -93,9 +93,15 @@ async function fetchFromYahoo(symbol: string, rangeYears: number): Promise<Symbo
 
   const prices: PricePoint[] = [];
   for (let i = 0; i < timestamps.length; i++) {
-    const close = closes[i];
+    let close = closes[i];
     if (close === null || close === undefined) continue;
     const date = new Date(timestamps[i] * 1000).toISOString().slice(0, 10);
+    // Yahoo Finance bug workaround: 00631L.TW underwent a 1:22 split in March 2026.
+    // Yahoo adjusted prices from 2015-01-05 onwards (~0.85), but left 2014-10-23 to 2014-12-31
+    // unadjusted (~19~20), causing a 22x artificial spike and distorted 12-year backtest metrics.
+    if (symbol.toUpperCase().startsWith("00631L") && date < "2015-01-01" && close > 5) {
+      close = close / 22;
+    }
     prices.push({ date, close });
   }
 
