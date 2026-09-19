@@ -102,6 +102,11 @@ async function fetchFromYahoo(symbol: string, rangeYears: number): Promise<Symbo
     if (symbol.toUpperCase().startsWith("00631L") && date < "2015-01-01" && close > 5) {
       close = close / 22;
     }
+    // Yahoo Finance FX bug workaround: TWD=X has an erroneous close of 3.67 on 2014-12-31
+    // (normal range ~25-35 TWD/USD), which causes a massive false spike in USD price conversions.
+    if (symbol.toUpperCase().includes("TWD=X") && (close < 15 || close > 50)) {
+      continue;
+    }
     prices.push({ date, close });
   }
 
