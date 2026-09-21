@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev, incomeProfile } from "@/lib/backtest";
+import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev, incomeProfile, simulateWithdrawnSeries } from "@/lib/backtest";
 import { parseStooqCsv, toStooqSymbol, toYahooSymbol, splitsUnreported, isTaiwanListed, symbolCandidates } from "@/lib/marketData";
 import { displaySymbol, fundSizeIn, getFundSize, nativeCurrencyOf } from "@/lib/symbolCatalog";
 import { PricePoint, BacktestMetrics } from "@/lib/types";
@@ -661,3 +661,35 @@ describe("nativeCurrencyOf", () => {
     expect(nativeCurrencyOf("TLT")).toBe("USD");
   });
 });
+
+describe("simulateWithdrawnSeries", () => {
+  it("calculates initial withdrawal and annual inflation-adjusted withdrawals", () => {
+    // 兩年資料：2023年與2024年，股價持平為 100
+    const points = [
+      { date: "2023-01-01", value: 100 },
+      { date: "2023-06-01", value: 100 },
+      { date: "2024-01-01", value: 100 },
+    ];
+    // 起點金額 10,000，提領率 3% (第一年初提領 300，剩餘 9,700)
+    // 2024年初提領通膨調整款：300 * (1 + 0.03) = 309，剩餘 9,700 - 309 = 9,391
+    const result = simulateWithdrawnSeries(points, 10000, 3, 3);
+    expect(result.points[0].value).toBe(9700);
+    expect(result.points[1].value).toBe(9700);
+    expect(result.points[2].value).toBe(9391);
+    expect(result.finalValue).toBe(9391);
+    expect(result.depletedDate).toBeNull();
+  });
+
+  it("handles depletion gracefully when withdrawals exceed portfolio value", () => {
+    const points = [
+      { date: "2023-01-01", value: 100 },
+      { date: "2024-01-01", value: 10 }, // 股價大跌
+    ];
+    // 起點 1,000，提領率 50% -> 2023初提領 500，剩 500 (換算 5 股)
+    // 2024年初：5 股現值 50，預計提領 500 * 1.05 = 525，資產不足耗盡
+    const result = simulateWithdrawnSeries(points, 1000, 50, 5);
+    expect(result.finalValue).toBe(0);
+    expect(result.depletedDate).toBe("2024-01-01");
+  });
+});
+

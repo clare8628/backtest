@@ -5,8 +5,9 @@ import { t, Lang } from "@/lib/i18n";
 import { displaySymbol, searchCatalog, symbolLabel } from "@/lib/symbolCatalog";
 import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries, Currency } from "@/lib/types";
 import { loadGroups, upsertGroup, deleteGroup, newGroupId } from "@/lib/storage";
-import PerformanceChart from "@/components/PerformanceChart";
+import PerformanceChart, { SimSettings } from "@/components/PerformanceChart";
 import Sparkline from "@/components/Sparkline";
+import { simulateWithdrawnSeries } from "@/lib/backtest";
 
 interface BacktestResult {
   metrics: BacktestMetrics[];
@@ -115,7 +116,11 @@ interface MetricRow {
  *  user chose, so a normal comparison fits without scrolling at all. Grouping
  *  the rows into sections also lets related numbers (the return decomposition
  *  especially, which reads as an equation) sit next to each other. */
-function metricSections(T: Dict, lang: Lang): { title: string; rows: MetricRow[] }[] {
+function metricSections(
+  T: Dict,
+  lang: Lang,
+  withdrawnValues?: Record<string, { value: number; depletedDate: string | null }>
+): { title: string; rows: MetricRow[] }[] {
   return [
     {
       title: T.groupReturn,
@@ -123,6 +128,30 @@ function metricSections(T: Dict, lang: Lang): { title: string; rows: MetricRow[]
         { label: T.totalReturn, value: (m) => pct(m.totalReturn) },
         { label: T.annualizedReturn, value: (m) => pct(m.annualizedReturn) },
         { label: T.finalValue, value: (m) => m.finalValue.toLocaleString() },
+        {
+          label: T.withdrawnFinalValue,
+          value: (m) => {
+            const data = withdrawnValues?.[m.symbol];
+            if (!data) return DASH;
+            if (data.depletedDate) {
+              const year = new Date(data.depletedDate).getFullYear();
+              return (
+                <span className="inline-flex items-center gap-1" style={{ color: "var(--negative)" }}>
+                  <span>0</span>
+                  <span className="text-[10px] opacity-75 font-normal">
+                    ({T.depletedAt} {year})
+                  </span>
+                </span>
+              );
+            }
+            return data.value.toLocaleString();
+          },
+          color: (m) => {
+            const data = withdrawnValues?.[m.symbol];
+            if (data && data.depletedDate) return "var(--negative)";
+            return undefined;
+          },
+        },
       ],
     },
     {
@@ -206,8 +235,52 @@ function metricSections(T: Dict, lang: Lang): { title: string; rows: MetricRow[]
   ];
 }
 
-function MetricsTable({ metrics, T, lang }: { metrics: BacktestMetrics[]; T: Dict; lang: Lang }) {
-  const sections = metricSections(T, lang);
+function MetricsTable({
+  metrics,
+  T,
+  lang,
+  chartSeries,
+  startValue = 1000,
+  simSettings,
+}: {
+  metrics: BacktestMetrics[];
+  T: Dict;
+  lang: Lang;
+  chartSeries?: ChartSeries[];
+  startValue?: number;
+  simSettings?: SimSettings;
+}) {
+  const effectiveSim = simSettings ?? { enabled: true, withdrawalRate: 3, inflationRate: 3 };
+
+  const withdrawnValues = useMemo(() => {
+    if (!chartSeries || chartSeries.length === 0) return {};
+    const res: Record<string, { value: number; depletedDate: string | null }> = {};
+    for (const s of chartSeries) {
+      if (s.points.length === 0) continue;
+      // 取各標的自身的基準價格（有 close 價格對應的序列）
+      const points = s.points
+        .map((p) => {
+          const val = p.priceUSD ?? p.priceTWD ?? 0;
+          return { date: p.date, value: val };
+        })
+        .filter((p) => p.value > 0);
+
+      if (points.length === 0) continue;
+      const sim = simulateWithdrawnSeries(
+        points,
+        startValue,
+        effectiveSim.withdrawalRate,
+        effectiveSim.inflationRate
+      );
+      res[s.symbol] = {
+        value: sim.finalValue,
+        depletedDate: sim.depletedDate,
+      };
+    }
+    return res;
+  }, [chartSeries, startValue, effectiveSim.withdrawalRate, effectiveSim.inflationRate]);
+
+  const sections = metricSections(T, lang, withdrawnValues);
   const sortedMetrics = useMemo(() => {
     return [...metrics].sort((a, b) => (b.totalReturn ?? 0) - (a.totalReturn ?? 0));
   }, [metrics]);
@@ -276,6 +349,7 @@ export default function Home() {
   const [results, setResults] = useState<Record<string, BacktestResult>>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [simSettingsMap, setSimSettingsMap] = useState<Record<string, SimSettings>>({});
   /** Which tile is open. One at a time: an open tile spans the whole grid row,
    *  so two of them would leave no gallery to come back to. */
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
@@ -949,6 +1023,10 @@ export default function Home() {
                           series={result.chartSeries}
                           mixedCurrencies={result.mixedCurrencies}
                           lang={lang}
+                          simSettings={simSettingsMap[g.id] ?? { enabled: false, withdrawalRate: 3, inflationRate: 3 }}
+                          onSimSettingsChange={(settings) =>
+                            setSimSettingsMap((prev) => ({ ...prev, [g.id]: settings }))
+                          }
                         />
                       </div>
                     )}
@@ -956,7 +1034,14 @@ export default function Home() {
                     {(result.metrics ?? []).length > 0 && (
                       <div className="flex flex-col gap-3">
                         <div className="overflow-x-auto">
-                          <MetricsTable metrics={result.metrics} T={T} lang={lang} />
+                          <MetricsTable
+                            metrics={result.metrics}
+                            T={T}
+                            lang={lang}
+                            chartSeries={result.chartSeries}
+                            startValue={g.startValue ?? 1000}
+                            simSettings={simSettingsMap[g.id] ?? { enabled: false, withdrawalRate: 3, inflationRate: 3 }}
+                          />
                         </div>
                         <Note title={T.sourceNote} body={T.sourceNoteText} />
                         <Note title={T.trendNote} body={T.trendNoteText} />

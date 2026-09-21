@@ -5,6 +5,8 @@ import { ChartSeries, Currency } from "@/lib/types";
 import { Lang, t } from "@/lib/i18n";
 import { displaySymbol, symbolLabel } from "@/lib/symbolCatalog";
 
+import { simulateWithdrawnSeries } from "@/lib/backtest";
+
 // 高對比顏色組合
 export const SERIES_COLORS = [
   "#2E7D32", // deep green
@@ -43,11 +45,19 @@ function textWidth(text: string, fontSize: number): number {
   return w;
 }
 
+export interface SimSettings {
+  enabled: boolean;
+  withdrawalRate: number;
+  inflationRate: number;
+}
+
 interface Props {
   series: ChartSeries[];
   mixedCurrencies: boolean;
   lang: Lang;
   height?: number;
+  simSettings?: SimSettings;
+  onSimSettingsChange?: (settings: SimSettings) => void;
 }
 
 interface CrisisEvent {
@@ -123,7 +133,14 @@ function yAxisLabel(mode: ChartMode, currency: Currency, lang: Lang): string {
  * optional USD/TWD currency toggle when the comparison mixes US and Taiwan
  * symbols.
  */
-export default function PerformanceChart({ series, mixedCurrencies, lang, height = 280 }: Props) {
+export default function PerformanceChart({
+  series,
+  mixedCurrencies,
+  lang,
+  height = 280,
+  simSettings,
+  onSimSettingsChange,
+}: Props) {
   const T = t(lang);
   const width = 640;
   const padding = { top: 24, right: 56, bottom: 28, left: 56 };
@@ -138,9 +155,28 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
   const activeCurrency: Currency = mixedCurrencies ? displayCurrency : series[0]?.currency ?? "USD";
 
   // 退休提領模擬設定（提領率預設 3%，通膨率預設 3%）
-  const [simEnabled, setSimEnabled] = useState<boolean>(false);
-  const [withdrawalRate, setWithdrawalRate] = useState<number>(3);
-  const [inflationRate, setInflationRate] = useState<number>(3);
+  const [localSimEnabled, setLocalSimEnabled] = useState<boolean>(false);
+  const [localWithdrawalRate, setLocalWithdrawalRate] = useState<number>(3);
+  const [localInflationRate, setLocalInflationRate] = useState<number>(3);
+
+  const simEnabled = simSettings !== undefined ? simSettings.enabled : localSimEnabled;
+  const withdrawalRate = simSettings !== undefined ? simSettings.withdrawalRate : localWithdrawalRate;
+  const inflationRate = simSettings !== undefined ? simSettings.inflationRate : localInflationRate;
+
+  function updateSimSettings(updates: Partial<SimSettings>) {
+    const next: SimSettings = {
+      enabled: updates.enabled ?? simEnabled,
+      withdrawalRate: updates.withdrawalRate ?? withdrawalRate,
+      inflationRate: updates.inflationRate ?? inflationRate,
+    };
+    if (onSimSettingsChange) {
+      onSimSettingsChange(next);
+    } else {
+      if (updates.enabled !== undefined) setLocalSimEnabled(updates.enabled);
+      if (updates.withdrawalRate !== undefined) setLocalWithdrawalRate(updates.withdrawalRate);
+      if (updates.inflationRate !== undefined) setLocalInflationRate(updates.inflationRate);
+    }
+  }
 
   const plotted = useMemo(() => {
     const raw = series
@@ -169,66 +205,16 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
     if (!simEnabled) return [];
 
     return plotted.map((s) => {
-      if (s.points.length === 0) return { symbol: s.symbol, points: [], depletedDate: null };
-      const initialValue = s.points[0].value;
-      const initialWithdrawal = initialValue * (withdrawalRate / 100);
-      const wRate = withdrawalRate / 100;
-      const iRate = inflationRate / 100;
-
-      let currentPortfolio = initialValue;
-      let shares = s.points[0].value > 0 ? 1 : 0;
-      let prevYear = new Date(s.points[0].date).getFullYear();
-      let yearIndex = 0;
-      let isDepleted = false;
-      let depletedDate: string | null = null;
-
-      // 第一年初提領
-      currentPortfolio = Math.max(0, currentPortfolio - initialWithdrawal);
-      if (s.points[0].value > 0) {
-        shares = currentPortfolio / s.points[0].value;
-      }
-      if (currentPortfolio <= 0 && !isDepleted) {
-        isDepleted = true;
-        depletedDate = s.points[0].date;
-      }
-
-      const points: PlottedPoint[] = [{ date: s.points[0].date, t: s.points[0].t, value: currentPortfolio }];
-
-      for (let i = 1; i < s.points.length; i++) {
-        const pt = s.points[i];
-        const yr = new Date(pt.date).getFullYear();
-
-        if (isDepleted) {
-          points.push({ date: pt.date, t: pt.t, value: 0 });
-          continue;
-        }
-
-        // 當跨入新年份時，初度進行通膨調整後的年度提領
-        if (yr > prevYear) {
-          yearIndex += yr - prevYear;
-          prevYear = yr;
-          const currentWithdrawal = initialValue * wRate * Math.pow(1 + iRate, yearIndex);
-          const currentValBeforeWithdraw = shares * pt.value;
-          if (currentValBeforeWithdraw <= currentWithdrawal) {
-            currentPortfolio = 0;
-            shares = 0;
-            isDepleted = true;
-            depletedDate = pt.date;
-          } else {
-            currentPortfolio = currentValBeforeWithdraw - currentWithdrawal;
-            shares = currentPortfolio / pt.value;
-          }
-        } else {
-          currentPortfolio = shares * pt.value;
-        }
-
-        points.push({ date: pt.date, t: pt.t, value: Math.max(0, currentPortfolio) });
-      }
-
+      const sim = simulateWithdrawnSeries(
+        s.points,
+        s.points[0]?.value ?? 0,
+        withdrawalRate,
+        inflationRate
+      );
       return {
         symbol: s.symbol,
-        points,
-        depletedDate,
+        points: sim.points,
+        depletedDate: sim.depletedDate,
       };
     });
   }, [plotted, simEnabled, withdrawalRate, inflationRate]);
@@ -433,7 +419,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
               <input
                 type="checkbox"
                 checked={simEnabled}
-                onChange={(e) => setSimEnabled(e.target.checked)}
+                onChange={(e) => updateSimSettings({ enabled: e.target.checked })}
                 className="w-3.5 h-3.5 accent-[var(--orchid-ink)] rounded cursor-pointer"
               />
               <span>{T.retirementSim}</span>
@@ -449,7 +435,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
                     min="0"
                     max="30"
                     value={withdrawalRate}
-                    onChange={(e) => setWithdrawalRate(Number(e.target.value) || 0)}
+                    onChange={(e) => updateSimSettings({ withdrawalRate: Number(e.target.value) || 0 })}
                     className="w-12 px-1.5 py-0.5 rounded text-center border bg-[var(--surface)] text-inherit"
                     style={{ borderColor: "var(--line)" }}
                   />
@@ -464,7 +450,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
                     min="0"
                     max="20"
                     value={inflationRate}
-                    onChange={(e) => setInflationRate(Number(e.target.value) || 0)}
+                    onChange={(e) => updateSimSettings({ inflationRate: Number(e.target.value) || 0 })}
                     className="w-12 px-1.5 py-0.5 rounded text-center border bg-[var(--surface)] text-inherit"
                     style={{ borderColor: "var(--line)" }}
                   />

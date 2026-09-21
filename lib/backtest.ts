@@ -675,3 +675,99 @@ export function trendStrength(prices: PricePoint[]): TrendStrength {
 
   return { trendR2, newHighMonthPct, positiveYearPct, gainPainRatio };
 }
+
+export interface WithdrawnSimulationResult {
+  finalValue: number;
+  depletedDate: string | null;
+  points: { date: string; t: number; value: number }[];
+}
+
+/**
+ * 模擬在固定初始金額下，按「提領率」與「通膨率」逐年調整提領金額後的投資組合走勢與最終價值。
+ * - 第一年初提領：initialValue * (withdrawalRate / 100)
+ * - 每年初通膨調整提領額：initialValue * (withdrawalRate / 100) * (1 + inflationRate / 100)^yearIndex
+ * - 若金額耗盡則歸零並記錄耗盡日期。
+ */
+export function simulateWithdrawnSeries(
+  rawPoints: { date: string; t?: number; value: number }[],
+  initialValue: number,
+  withdrawalRate: number,
+  inflationRate: number
+): WithdrawnSimulationResult {
+  if (rawPoints.length === 0) {
+    return { finalValue: 0, depletedDate: null, points: [] };
+  }
+
+  const wRate = withdrawalRate / 100;
+  const iRate = inflationRate / 100;
+  const initialWithdrawal = initialValue * wRate;
+
+  let currentPortfolio = initialValue;
+  const baseVal = rawPoints[0].value || 1;
+  let shares = baseVal > 0 ? initialValue / baseVal : 0;
+  let prevYear = new Date(rawPoints[0].date).getFullYear();
+  let yearIndex = 0;
+  let isDepleted = false;
+  let depletedDate: string | null = null;
+
+  // 第一年初進行提領
+  currentPortfolio = Math.max(0, currentPortfolio - initialWithdrawal);
+  if (baseVal > 0) {
+    shares = currentPortfolio / baseVal;
+  }
+  if (currentPortfolio <= 0 && !isDepleted) {
+    isDepleted = true;
+    depletedDate = rawPoints[0].date;
+  }
+
+  const points: { date: string; t: number; value: number }[] = [
+    {
+      date: rawPoints[0].date,
+      t: rawPoints[0].t ?? new Date(rawPoints[0].date).getTime(),
+      value: round2(currentPortfolio),
+    },
+  ];
+
+  for (let i = 1; i < rawPoints.length; i++) {
+    const pt = rawPoints[i];
+    const yr = new Date(pt.date).getFullYear();
+    const t = pt.t ?? new Date(pt.date).getTime();
+
+    if (isDepleted) {
+      points.push({ date: pt.date, t, value: 0 });
+      continue;
+    }
+
+    if (yr > prevYear) {
+      yearIndex += yr - prevYear;
+      prevYear = yr;
+      const currentWithdrawal = initialValue * wRate * Math.pow(1 + iRate, yearIndex);
+      const currentValBeforeWithdraw = shares * pt.value;
+      if (currentValBeforeWithdraw <= currentWithdrawal) {
+        currentPortfolio = 0;
+        shares = 0;
+        isDepleted = true;
+        depletedDate = pt.date;
+      } else {
+        currentPortfolio = currentValBeforeWithdraw - currentWithdrawal;
+        shares = currentPortfolio / pt.value;
+      }
+    } else {
+      currentPortfolio = shares * pt.value;
+    }
+
+    points.push({
+      date: pt.date,
+      t,
+      value: round2(Math.max(0, currentPortfolio)),
+    });
+  }
+
+  const lastPoint = points[points.length - 1];
+  return {
+    finalValue: lastPoint ? lastPoint.value : 0,
+    depletedDate,
+    points,
+  };
+}
+
