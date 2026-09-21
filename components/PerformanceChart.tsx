@@ -137,6 +137,11 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
   const [displayCurrency, setDisplayCurrency] = useState<Currency>("USD");
   const activeCurrency: Currency = mixedCurrencies ? displayCurrency : series[0]?.currency ?? "USD";
 
+  // 退休提領模擬設定（提領率預設 3%，通膨率預設 3%）
+  const [simEnabled, setSimEnabled] = useState<boolean>(false);
+  const [withdrawalRate, setWithdrawalRate] = useState<number>(3);
+  const [inflationRate, setInflationRate] = useState<number>(3);
+
   const plotted = useMemo(() => {
     const raw = series
       .map((s) => ({
@@ -159,13 +164,85 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
     });
   }, [series, activeCurrency, mode]);
 
+  // 模擬每年提領並考慮通膨後的累積淨值曲線
+  const plottedWithdrawn = useMemo(() => {
+    if (!simEnabled) return [];
+
+    return plotted.map((s) => {
+      if (s.points.length === 0) return { symbol: s.symbol, points: [], depletedDate: null };
+      const initialValue = s.points[0].value;
+      const initialWithdrawal = initialValue * (withdrawalRate / 100);
+      const wRate = withdrawalRate / 100;
+      const iRate = inflationRate / 100;
+
+      let currentPortfolio = initialValue;
+      let shares = s.points[0].value > 0 ? 1 : 0;
+      let prevYear = new Date(s.points[0].date).getFullYear();
+      let yearIndex = 0;
+      let isDepleted = false;
+      let depletedDate: string | null = null;
+
+      // 第一年初提領
+      currentPortfolio = Math.max(0, currentPortfolio - initialWithdrawal);
+      if (s.points[0].value > 0) {
+        shares = currentPortfolio / s.points[0].value;
+      }
+      if (currentPortfolio <= 0 && !isDepleted) {
+        isDepleted = true;
+        depletedDate = s.points[0].date;
+      }
+
+      const points: PlottedPoint[] = [{ date: s.points[0].date, t: s.points[0].t, value: currentPortfolio }];
+
+      for (let i = 1; i < s.points.length; i++) {
+        const pt = s.points[i];
+        const yr = new Date(pt.date).getFullYear();
+
+        if (isDepleted) {
+          points.push({ date: pt.date, t: pt.t, value: 0 });
+          continue;
+        }
+
+        // 當跨入新年份時，初度進行通膨調整後的年度提領
+        if (yr > prevYear) {
+          yearIndex += yr - prevYear;
+          prevYear = yr;
+          const currentWithdrawal = initialValue * wRate * Math.pow(1 + iRate, yearIndex);
+          const currentValBeforeWithdraw = shares * pt.value;
+          if (currentValBeforeWithdraw <= currentWithdrawal) {
+            currentPortfolio = 0;
+            shares = 0;
+            isDepleted = true;
+            depletedDate = pt.date;
+          } else {
+            currentPortfolio = currentValBeforeWithdraw - currentWithdrawal;
+            shares = currentPortfolio / pt.value;
+          }
+        } else {
+          currentPortfolio = shares * pt.value;
+        }
+
+        points.push({ date: pt.date, t: pt.t, value: Math.max(0, currentPortfolio) });
+      }
+
+      return {
+        symbol: s.symbol,
+        points,
+        depletedDate,
+      };
+    });
+  }, [plotted, simEnabled, withdrawalRate, inflationRate]);
+
   const [hoverT, setHoverT] = useState<number | null>(null);
   const [hoveredCrisis, setHoveredCrisis] = useState<string | null>(null);
 
   if (plotted.length === 0) return null;
 
   const allT = plotted.flatMap((s) => s.points.map((p) => p.t));
-  const allV = plotted.flatMap((s) => s.points.map((p) => p.value));
+  const allV = [
+    ...plotted.flatMap((s) => s.points.map((p) => p.value)),
+    ...(simEnabled ? plottedWithdrawn.flatMap((s) => s.points.map((p) => p.value)) : []),
+  ];
   const tMin = Math.min(...allT);
   const tMax = Math.max(...allT);
   const minV = Math.min(...allV);
@@ -246,7 +323,15 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
 
   const hoverPoints =
     hoverT !== null
-      ? plotted.map((s) => ({ symbol: s.symbol, point: nearestPoint(s.points, hoverT) }))
+      ? plotted.map((s, idx) => {
+          const pt = nearestPoint(s.points, hoverT);
+          const wPt = simEnabled && plottedWithdrawn[idx] ? nearestPoint(plottedWithdrawn[idx].points, hoverT) : null;
+          return {
+            symbol: s.symbol,
+            point: pt,
+            withdrawnPoint: wPt,
+          };
+        })
       : null;
   const hoverX = hoverT !== null ? xFor(hoverT) : null;
   const tooltipDate = hoverPoints?.find((h) => h.point)?.point?.date;
@@ -260,15 +345,20 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
     setHoverT(tForX(xPixel));
   }
 
-  // The tooltip lists one line per symbol, and a Taiwan symbol's line carries
-  // its fund name, so the box is sized to its own longest line — clamped so a
-  // long name can't grow it past a third of the chart.
-  const tooltipLines = (hoverPoints ?? []).flatMap((h) =>
-    h.point ? [`${displaySymbol(h.symbol, lang)}: ${formatValue(h.point.value, mode, activeCurrency)}`] : []
-  );
+  // The tooltip lists one line per symbol (and withdrawn line if enabled)
+  const tooltipLines = (hoverPoints ?? []).flatMap((h) => {
+    const lines: string[] = [];
+    if (h.point) {
+      lines.push(`${displaySymbol(h.symbol, lang)}: ${formatValue(h.point.value, mode, activeCurrency)}`);
+    }
+    if (h.withdrawnPoint) {
+      lines.push(`↳ ${T.withdrawnCurveLabel}: ${formatValue(h.withdrawnPoint.value, mode, activeCurrency)}`);
+    }
+    return lines;
+  });
   const tooltipW = Math.min(
-    320,
-    Math.max(150, ...tooltipLines.map((line) => textWidth(line, 9.5) + 16))
+    360,
+    Math.max(160, ...tooltipLines.map((line) => textWidth(line, 9.5) + 20))
   );
 
   // While a crisis marker is hovered, its label and the price tooltip must
@@ -313,22 +403,78 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
-        <div className="flex gap-1">
-          {(["price", "index"] as ChartMode[]).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className="px-3 py-1 rounded-full"
-              style={{
-                border: "1px solid var(--line)",
-                background: mode === m ? "var(--orchid-ink)" : "transparent",
-                color: mode === m ? "white" : "inherit",
-              }}
-            >
-              {m === "price" ? T.chartModePrice : T.chartModeIndex}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1">
+            {(["price", "index"] as ChartMode[]).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className="px-3 py-1 rounded-full"
+                style={{
+                  border: "1px solid var(--line)",
+                  background: mode === m ? "var(--orchid-ink)" : "transparent",
+                  color: mode === m ? "white" : "inherit",
+                }}
+              >
+                {m === "price" ? T.chartModePrice : T.chartModeIndex}
+              </button>
+            ))}
+          </div>
+
+          {/* 退休提領模擬開關與數值設定 */}
+          <div
+            className="flex items-center gap-2 px-2.5 py-1 rounded-full border transition-all"
+            style={{
+              borderColor: simEnabled ? "var(--orchid-ink)" : "var(--line)",
+              background: simEnabled ? "rgba(123, 31, 162, 0.06)" : "transparent",
+            }}
+          >
+            <label className="inline-flex items-center gap-1.5 cursor-pointer font-medium select-none">
+              <input
+                type="checkbox"
+                checked={simEnabled}
+                onChange={(e) => setSimEnabled(e.target.checked)}
+                className="w-3.5 h-3.5 accent-[var(--orchid-ink)] rounded cursor-pointer"
+              />
+              <span>{T.retirementSim}</span>
+            </label>
+
+            {simEnabled && (
+              <div className="flex items-center gap-2 pl-1 border-l border-[var(--line)]">
+                <div className="flex items-center gap-1">
+                  <span className="opacity-70">{T.withdrawalRate}:</span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="30"
+                    value={withdrawalRate}
+                    onChange={(e) => setWithdrawalRate(Number(e.target.value) || 0)}
+                    className="w-12 px-1.5 py-0.5 rounded text-center border bg-[var(--surface)] text-inherit"
+                    style={{ borderColor: "var(--line)" }}
+                  />
+                  <span>%</span>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <span className="opacity-70">{T.inflationRate}:</span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="20"
+                    value={inflationRate}
+                    onChange={(e) => setInflationRate(Number(e.target.value) || 0)}
+                    className="w-12 px-1.5 py-0.5 rounded text-center border bg-[var(--surface)] text-inherit"
+                    style={{ borderColor: "var(--line)" }}
+                  />
+                  <span>%</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+
         <div className="flex flex-col items-end gap-1">
           <div className="flex gap-1">
             {(["linear", "log"] as ChartScale[]).map((s) => (
@@ -361,6 +507,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
             {scale === "linear" ? `← ${T.scaleGuideLinear}` : `${T.scaleGuideLog} →`}
           </span>
         </div>
+
         {mixedCurrencies && (
           <div className="flex gap-1">
             {(["USD", "TWD"] as Currency[]).map((c) => (
@@ -501,6 +648,39 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
             return <path key={s.symbol} d={d} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />;
           })}
 
+          {/* 提領後曲線 (含通膨疊加) */}
+          {simEnabled &&
+            plottedWithdrawn.map((s, idx) => {
+              const color = SERIES_COLORS[idx % SERIES_COLORS.length];
+              const d = s.points
+                .map((p, i) => `${i === 0 ? "M" : "L"} ${xFor(p.t).toFixed(1)} ${yFor(p.value).toFixed(1)}`)
+                .join(" ");
+              return (
+                <g key={`withdrawn-${s.symbol}`}>
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={2}
+                    strokeDasharray="4,3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity={0.85}
+                  />
+                  {s.depletedDate && (
+                    <circle
+                      cx={xFor(new Date(s.depletedDate).getTime())}
+                      cy={yFor(0)}
+                      r={4.5}
+                      fill="#D32F2F"
+                      stroke="var(--surface)"
+                      strokeWidth={1.5}
+                    />
+                  )}
+                </g>
+              );
+            })}
+
           {/* crisis markers — fixed (always visible) red dots on each series at
               well-known market crashes, with the event name on hover */}
           {visibleCrises.map((c) => {
@@ -566,11 +746,31 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
           {hoverX !== null && (
             <>
               <line x1={hoverX} x2={hoverX} y1={padding.top} y2={height - padding.bottom} stroke="currentColor" strokeOpacity={0.35} strokeWidth={1} />
-              {hoverPoints?.map((h, idx) =>
-                h.point ? (
-                  <circle key={h.symbol} cx={xFor(h.point.t)} cy={yFor(h.point.value)} r={3.5} fill={SERIES_COLORS[idx % SERIES_COLORS.length]} stroke="var(--surface)" strokeWidth={1.5} />
-                ) : null
-              )}
+              {hoverPoints?.map((h, idx) => (
+                <g key={h.symbol}>
+                  {h.point && (
+                    <circle
+                      cx={xFor(h.point.t)}
+                      cy={yFor(h.point.value)}
+                      r={3.5}
+                      fill={SERIES_COLORS[idx % SERIES_COLORS.length]}
+                      stroke="var(--surface)"
+                      strokeWidth={1.5}
+                    />
+                  )}
+                  {h.withdrawnPoint && (
+                    <circle
+                      cx={xFor(h.withdrawnPoint.t)}
+                      cy={yFor(h.withdrawnPoint.value)}
+                      r={3}
+                      fill={SERIES_COLORS[idx % SERIES_COLORS.length]}
+                      stroke="var(--surface)"
+                      strokeWidth={1}
+                      opacity={0.8}
+                    />
+                  )}
+                </g>
+              ))}
             </>
           )}
 
@@ -581,7 +781,7 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
                 x={0}
                 y={0}
                 width={tooltipW}
-                height={30 + hoverPoints.length * 14}
+                height={30 + tooltipLines.length * 14}
                 rx={6}
                 fill="var(--surface)"
                 stroke="var(--line)"
@@ -590,34 +790,66 @@ export default function PerformanceChart({ series, mixedCurrencies, lang, height
               <text x={8} y={14} fontSize={10} fontWeight={600} fill="currentColor">
                 {formatYearMonth(tooltipDate, lang)}
               </text>
-              {/* unit restated here too — the axis title above can scroll out of
-                  view, and this is exactly where a real price vs. an index value
-                  gets misread as the other */}
+              {/* unit restated here too */}
               <text x={8} y={25} fontSize={8} fill="currentColor" opacity={0.55}>
                 {yAxisLabel(mode, activeCurrency, lang)}
               </text>
-              {hoverPoints.map((h, idx) =>
-                h.point ? (
-                  <text key={h.symbol} x={8} y={41 + idx * 14} fontSize={9.5} fill={SERIES_COLORS[idx % SERIES_COLORS.length]}>
-                    {displaySymbol(h.symbol, lang)}: {formatValue(h.point.value, mode, activeCurrency)}
-                  </text>
-                ) : null
-              )}
+              {(() => {
+                let currentIdx = 0;
+                return hoverPoints.map((h, sIdx) => {
+                  const items: React.ReactNode[] = [];
+                  if (h.point) {
+                    const row = currentIdx++;
+                    items.push(
+                      <text key={`${h.symbol}-val`} x={8} y={41 + row * 14} fontSize={9.5} fill={SERIES_COLORS[sIdx % SERIES_COLORS.length]}>
+                        {displaySymbol(h.symbol, lang)}: {formatValue(h.point.value, mode, activeCurrency)}
+                      </text>
+                    );
+                  }
+                  if (h.withdrawnPoint) {
+                    const row = currentIdx++;
+                    items.push(
+                      <text key={`${h.symbol}-withdrawn`} x={14} y={41 + row * 14} fontSize={8.5} fill={SERIES_COLORS[sIdx % SERIES_COLORS.length]} opacity={0.85}>
+                        ↳ {T.withdrawnCurveLabel}: {formatValue(h.withdrawnPoint.value, mode, activeCurrency)}
+                      </text>
+                    );
+                  }
+                  return items;
+                });
+              })()}
             </g>
           )}
         </svg>
 
-        <div className="flex flex-wrap gap-3 mt-2 text-xs">
+        <div className="flex flex-wrap items-center gap-3 mt-2 text-xs">
           {plotted.map((s, idx) => (
             <span key={s.symbol} className="flex items-center gap-1.5">
               <span className="inline-block w-4 h-1 rounded" style={{ background: SERIES_COLORS[idx % SERIES_COLORS.length] }} />
               <LegendLabel symbol={s.symbol} lang={lang} />
             </span>
           ))}
+
+          {simEnabled && (
+            <span className="flex items-center gap-1.5 opacity-80">
+              <span
+                className="inline-block w-4 h-0.5 border-t-2 border-dashed"
+                style={{ borderColor: "currentColor" }}
+              />
+              <span>{T.withdrawnCurveLabel}（{withdrawalRate}%提領, {inflationRate}%通膨）</span>
+            </span>
+          )}
+
           <span className="opacity-50">
             {mode === "price" ? `(${activeCurrency})` : lang === "zh" ? "(指數＝100)" : "(Index=100)"}
           </span>
         </div>
+
+        {simEnabled && (
+          <p className="text-[11px] opacity-60 mt-1">
+            💡 {T.simExplanation}
+          </p>
+        )}
+
         {mode === "price" && (
           <p className="text-xs opacity-50 mt-0.5">{T.splitAdjustedNote}</p>
         )}
