@@ -1,34 +1,74 @@
-import { DividendEvent, PricePoint, SplitEvent, SymbolSeries } from "./types";
+import { Currency, DividendEvent, PricePoint, SplitEvent, SymbolSeries } from "./types";
+import { findEntry } from "./symbolCatalog";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
+export interface SymbolLookupResult {
+  found: boolean;
+  symbol: string;
+  canonicalSymbol: string;
+  name: string;
+  nameEn: string;
+  currency: Currency;
+  latestPrice?: number;
+  previousClose?: number;
+  category?: string;
+  channelUsed?: string;
+  channelsTried?: string[];
+  error?: string;
+}
+
+interface YahooMeta {
+  currency?: string;
+  symbol?: string;
+  shortName?: string;
+  longName?: string;
+  regularMarketPrice?: number;
+  chartPreviousClose?: number;
+  instrumentType?: string;
+}
+
 /**
  * Fetches daily historical close prices for a symbol.
- * Primary source: Yahoo Finance chart API (no key required).
- * Fallback: Stooq CSV endpoint, in case Yahoo is unreachable for a symbol.
+ * Multi-channel architecture:
+ *  - Primary: Yahoo Finance Query 1 API
+ *  - Backup A: Yahoo Finance Query 2 API
+ *  - Backup B: Stooq CSV endpoint
  */
 export async function fetchDailyPrices(
   symbol: string,
-  rangeYears = 5
+  rangeYears = 5,
+  forceRefresh = false
 ): Promise<SymbolSeries> {
-  for (const candidate of symbolCandidates(symbol)) {
+  const attempted: string[] = [];
+  const candidates = symbolCandidates(symbol);
+  const symbolsToTry = candidates.length > 0 ? candidates : [symbol];
+
+  for (const sym of symbolsToTry) {
+    // Channel 1: Yahoo Finance Query 1 (Primary)
     try {
-      return await fetchFromYahoo(candidate, rangeYears);
+      attempted.push(`Yahoo Q1 (${sym})`);
+      return await fetchFromYahoo(sym, rangeYears, 0, forceRefresh);
     } catch {
-      // Try the next suffix before falling through to the Stooq fallback.
+      // Channel 2: Yahoo Finance Query 2 (Backup A)
+      try {
+        attempted.push(`Yahoo Q2 (${sym})`);
+        return await fetchFromYahoo(sym, rangeYears, 1, forceRefresh);
+      } catch {
+        // Try next candidate or fallback
+      }
     }
   }
+
+  // Channel 3: Stooq (Backup B)
   try {
-    return await fetchFromYahoo(symbol, rangeYears);
-  } catch (yahooError) {
-    try {
-      return await fetchFromStooq(symbol, rangeYears);
-    } catch (stooqError) {
-      const yMsg = yahooError instanceof Error ? yahooError.message : String(yahooError);
-      const sMsg = stooqError instanceof Error ? stooqError.message : String(stooqError);
-      throw new Error(`No price data found for symbol: ${symbol} (yahoo: ${yMsg}; stooq: ${sMsg})`);
-    }
+    attempted.push(`Stooq (${symbol})`);
+    return await fetchFromStooq(symbol, rangeYears, forceRefresh);
+  } catch {
+    throw new Error(
+      `No price data found for symbol: ${symbol} (tried channels: ${attempted.join(", ")})`
+    );
   }
 }
 
@@ -64,9 +104,15 @@ export function toYahooSymbol(symbol: string): string {
   return /^[A-Z]+\.[A-Z]$/.test(s) ? s.replace(".", "-") : s;
 }
 
-async function fetchFromYahoo(symbol: string, rangeYears: number): Promise<SymbolSeries> {
+async function fetchFromYahoo(
+  symbol: string,
+  rangeYears: number,
+  hostIndex = 0,
+  forceRefresh = false
+): Promise<SymbolSeries> {
+  const host = hostIndex === 0 ? "query1.finance.yahoo.com" : "query2.finance.yahoo.com";
   const range = yearsToYahooRange(rangeYears);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+  const url = `https://${host}/v8/finance/chart/${encodeURIComponent(
     toYahooSymbol(symbol)
   )}?range=${range}&interval=1d&events=div%2Csplit`;
 
@@ -75,7 +121,7 @@ async function fetchFromYahoo(symbol: string, rangeYears: number): Promise<Symbo
       "User-Agent": BROWSER_UA,
       Accept: "application/json",
     },
-    next: { revalidate: 3600 },
+    ...(forceRefresh ? { cache: "no-store" } : { next: { revalidate: 3600 } }),
   });
 
   if (!res.ok) {
@@ -178,21 +224,6 @@ export function isTaiwanListed(symbol: string): boolean {
 /**
  * What an *absent* split-events block means for this symbol: a genuine zero,
  * or simply unknown.
- *
- * Yahoo omits the block both for a symbol that has truly never split and for
- * one whose split history it doesn't carry, so the response alone can't tell
- * the two apart — the market has to decide it. For US-listed symbols the
- * coverage is reliable (AAPL's 2020 4:1, TSLA's 5:1 and 3:1, NVDA's 4:1 and
- * 10:1, TQQQ's eight splits all come through), so an empty block is a real
- * zero. For Taiwan-listed ETFs it is not: 0050.TW's 1-into-4 split of June
- * 2025 is missing entirely even though the prices around it *are* adjusted for
- * it (~NT$47 where it had traded ~NT$190). Taiwan-listed *stocks* do report
- * theirs (2330.TW returns ten events), but we can't enumerate which symbols
- * are covered, so every Taiwan-listed symbol with an empty block is reported
- * as unknown rather than as a confident zero.
- *
- * Returns are unaffected either way — the price series is split-adjusted at
- * source, so this only governs whether the UI can show a count or a dash.
  */
 export function splitsUnreported(symbol: string): SplitEvent[] | undefined {
   return isTaiwanListed(symbol) ? undefined : [];
@@ -206,13 +237,13 @@ function yearsToYahooRange(years: number): string {
   return "max";
 }
 
-async function fetchFromStooq(symbol: string, rangeYears: number): Promise<SymbolSeries> {
+async function fetchFromStooq(symbol: string, rangeYears: number, forceRefresh = false): Promise<SymbolSeries> {
   const stooqSymbol = toStooqSymbol(symbol);
   const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSymbol)}&i=d`;
 
   const res = await fetch(url, {
     headers: { "User-Agent": BROWSER_UA },
-    next: { revalidate: 3600 },
+    ...(forceRefresh ? { cache: "no-store" } : { next: { revalidate: 3600 } }),
   });
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);
@@ -258,7 +289,8 @@ export function parseStooqCsv(csv: string): PricePoint[] {
 
 export async function fetchMultiple(
   symbols: string[],
-  rangeYears = 5
+  rangeYears = 5,
+  forceRefresh = false
 ): Promise<{ results: SymbolSeries[]; errors: { symbol: string; message: string }[] }> {
   const results: SymbolSeries[] = [];
   const errors: { symbol: string; message: string }[] = [];
@@ -266,7 +298,7 @@ export async function fetchMultiple(
   await Promise.all(
     symbols.map(async (sym) => {
       try {
-        const series = await fetchDailyPrices(sym, rangeYears);
+        const series = await fetchDailyPrices(sym, rangeYears, forceRefresh);
         results.push(series);
       } catch (e) {
         errors.push({ symbol: sym, message: e instanceof Error ? e.message : String(e) });
@@ -275,4 +307,293 @@ export async function fetchMultiple(
   );
 
   return { results, errors };
+}
+
+async function fetchYahooMeta(symbol: string, hostIndex: number): Promise<YahooMeta | null> {
+  const host = hostIndex === 0 ? "query1.finance.yahoo.com" : "query2.finance.yahoo.com";
+  const url = `https://${host}/v8/finance/chart/${encodeURIComponent(toYahooSymbol(symbol))}?range=1d&interval=1d`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": BROWSER_UA,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.chart?.result?.[0]?.meta || null;
+  } catch {
+    return null;
+  }
+}
+
+async function searchYahooQuotes(query: string): Promise<SymbolLookupResult | null> {
+  const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=5`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": BROWSER_UA,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const quotes = data?.quotes;
+    if (!Array.isArray(quotes) || quotes.length === 0) return null;
+    const qUpper = query.trim().toUpperCase();
+    const match =
+      quotes.find((q: { symbol?: string }) => q.symbol?.toUpperCase() === qUpper) ||
+      quotes.find((q: { symbol?: string }) => q.symbol?.toUpperCase().startsWith(qUpper)) ||
+      quotes[0];
+    if (!match?.symbol) return null;
+    const canonical = match.symbol.toUpperCase();
+    const isTw = isTaiwanListed(canonical);
+    return {
+      found: true,
+      symbol: qUpper,
+      canonicalSymbol: canonical,
+      name: match.shortname || match.longname || canonical,
+      nameEn: match.longname || match.shortname || canonical,
+      currency: isTw ? "TWD" : "USD",
+      category: match.quoteType === "ETF" ? "ETF" : "Stock",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function resolveTaiwanChineseName(canonicalSymbol: string): Promise<string | null> {
+  // 1. Check local catalog
+  const catalogEntry = findEntry(canonicalSymbol);
+  if (catalogEntry?.name) return catalogEntry.name;
+
+  // 2. Query TWSE MIS API for instant official Chinese name
+  try {
+    const isTPEx = canonicalSymbol.endsWith(".TWO");
+    const exCh = `${isTPEx ? "otc_" : "tse_"}${canonicalSymbol.toLowerCase()}`;
+    const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${exCh}&json=1&delay=0`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": BROWSER_UA },
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const msg = data?.msgArray?.[0];
+      if (msg?.n && msg.n !== "-") return msg.n;
+    }
+  } catch {
+    // fallback
+  }
+
+  return null;
+}
+
+async function lookupTaiwanOpenApi(rawSymbol: string): Promise<SymbolLookupResult | null> {
+  const cleanCode = rawSymbol.trim().toUpperCase().replace(/\.(TW|TWO)$/i, "");
+  try {
+    const res = await fetch("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL", {
+      headers: { "User-Agent": BROWSER_UA },
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const list = await res.json();
+      if (Array.isArray(list)) {
+        const item = list.find((it: { Code?: string }) => it.Code === cleanCode);
+        if (item) {
+          const canonical = `${item.Code}.TW`;
+          const closePrice = parseFloat(item.ClosingPrice);
+          return {
+            found: true,
+            symbol: rawSymbol.toUpperCase(),
+            canonicalSymbol: canonical,
+            name: item.Name || canonical,
+            nameEn: item.Name || canonical,
+            currency: "TWD",
+            latestPrice: Number.isNaN(closePrice) ? undefined : closePrice,
+            category: "Stock",
+            channelUsed: "TWSE 官方證券資料庫 (Backup)",
+          };
+        }
+      }
+    }
+  } catch {
+    // try next
+  }
+
+  return null;
+}
+
+/**
+ * Validates and looks up a symbol across multiple live channels.
+ * Returns metadata including canonical symbol, name, currency, latest price, and channel used.
+ */
+export async function lookupSymbol(rawSymbol: string): Promise<SymbolLookupResult> {
+  const s = rawSymbol.trim().toUpperCase();
+  const channelsTried: string[] = [];
+
+  if (!s) {
+    return {
+      found: false,
+      symbol: "",
+      canonicalSymbol: "",
+      name: "",
+      nameEn: "",
+      currency: "USD",
+      error: "標的代號不能為空",
+      channelsTried,
+    };
+  }
+
+  // 0. Check internal catalog
+  const catalogEntry = findEntry(s);
+  if (catalogEntry) {
+    const canonical = catalogEntry.symbol.toUpperCase();
+    const currency = isTaiwanListed(canonical) ? "TWD" : "USD";
+    return {
+      found: true,
+      symbol: s,
+      canonicalSymbol: canonical,
+      name: catalogEntry.name,
+      nameEn: catalogEntry.nameEn,
+      currency,
+      category: catalogEntry.category,
+      channelUsed: "內建標的庫 (Catalog)",
+      channelsTried: ["內建標的庫"],
+    };
+  }
+
+  // Candidates for bare Taiwanese tickers (e.g. 2330 -> 2330.TW, 2330.TWO)
+  const candidates = symbolCandidates(s);
+  const symbolsToTry = candidates.length > 0 ? candidates : [s];
+
+  // 1. Try Yahoo Finance Query 1 (Primary)
+  for (const cand of symbolsToTry) {
+    try {
+      channelsTried.push(`Yahoo Finance Q1 (${cand})`);
+      const meta = await fetchYahooMeta(cand, 0);
+      if (meta && (meta.regularMarketPrice !== undefined || meta.chartPreviousClose !== undefined)) {
+        return await buildLookupResult(meta, cand, "Yahoo Finance (Primary)", channelsTried);
+      }
+    } catch {
+      // try next
+    }
+  }
+
+  // 2. Try Yahoo Finance Query 2 (Backup A)
+  for (const cand of symbolsToTry) {
+    try {
+      channelsTried.push(`Yahoo Finance Q2 (${cand})`);
+      const meta = await fetchYahooMeta(cand, 1);
+      if (meta && (meta.regularMarketPrice !== undefined || meta.chartPreviousClose !== undefined)) {
+        return await buildLookupResult(meta, cand, "Yahoo Finance (Backup Q2)", channelsTried);
+      }
+    } catch {
+      // try next
+    }
+  }
+
+  // 3. Try Yahoo Search API (Backup B)
+  try {
+    channelsTried.push(`Yahoo Finance Search (${s})`);
+    const searchRes = await searchYahooQuotes(s);
+    if (searchRes && searchRes.found) {
+      if (searchRes.currency === "TWD") {
+        const twName = await resolveTaiwanChineseName(searchRes.canonicalSymbol);
+        if (twName) searchRes.name = twName;
+      }
+      return {
+        ...searchRes,
+        channelUsed: "Yahoo Finance (Search API)",
+        channelsTried,
+      };
+    }
+  } catch {
+    // try next
+  }
+
+  // 4. Try Taiwan Official OpenAPI (Backup C - Taiwan)
+  const isTaiwanCandidate = candidates.length > 0 || isTaiwanListed(s);
+  if (isTaiwanCandidate) {
+    try {
+      channelsTried.push(`TWSE/TPEx OpenAPI (${s})`);
+      const twRes = await lookupTaiwanOpenApi(s);
+      if (twRes && twRes.found) {
+        return {
+          ...twRes,
+          channelsTried,
+        };
+      }
+    } catch {
+      // try next
+    }
+  }
+
+  // 5. Try Stooq CSV (Backup D - US)
+  try {
+    channelsTried.push(`Stooq (${s})`);
+    const stooqRes = await fetchFromStooq(s, 1);
+    if (stooqRes && stooqRes.prices.length > 0) {
+      const latest = stooqRes.prices[stooqRes.prices.length - 1];
+      return {
+        found: true,
+        symbol: s,
+        canonicalSymbol: s,
+        name: s,
+        nameEn: s,
+        currency: "USD",
+        latestPrice: latest.close,
+        category: "Stock",
+        channelUsed: "Stooq (Backup)",
+        channelsTried,
+      };
+    }
+  } catch {
+    // all failed
+  }
+
+  return {
+    found: false,
+    symbol: s,
+    canonicalSymbol: s,
+    name: s,
+    nameEn: s,
+    currency: isTaiwanListed(s) ? "TWD" : "USD",
+    error: `找不到標的「${s}」的行情數據。已嘗試多個管道（${channelsTried.join("、")}）均無此代號，請確認代號是否正確。`,
+    channelsTried,
+  };
+}
+
+async function buildLookupResult(
+  meta: YahooMeta,
+  cand: string,
+  channel: string,
+  channelsTried: string[]
+): Promise<SymbolLookupResult> {
+  const canonicalSymbol = meta.symbol?.toUpperCase() || cand.toUpperCase();
+  const currency: Currency = meta.currency === "TWD" || isTaiwanListed(canonicalSymbol) ? "TWD" : "USD";
+  let name = meta.shortName || meta.longName || canonicalSymbol;
+  const nameEn = meta.longName || meta.shortName || canonicalSymbol;
+
+  if (currency === "TWD") {
+    const twName = await resolveTaiwanChineseName(canonicalSymbol);
+    if (twName) {
+      name = twName;
+    }
+  }
+
+  return {
+    found: true,
+    symbol: cand.toUpperCase(),
+    canonicalSymbol,
+    name,
+    nameEn,
+    currency,
+    latestPrice: meta.regularMarketPrice ?? meta.chartPreviousClose,
+    previousClose: meta.chartPreviousClose,
+    category: meta.instrumentType === "ETF" ? "ETF" : "Stock",
+    channelUsed: channel,
+    channelsTried,
+  };
 }

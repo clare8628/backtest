@@ -2,7 +2,7 @@
 
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { t, Lang } from "@/lib/i18n";
-import { displaySymbol, searchCatalog, symbolLabel } from "@/lib/symbolCatalog";
+import { displaySymbol, findEntry, registerDynamicSymbol, searchCatalog, symbolLabel } from "@/lib/symbolCatalog";
 import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries, Currency } from "@/lib/types";
 import { loadGroups, upsertGroup, deleteGroup, newGroupId } from "@/lib/storage";
 import PerformanceChart, { SimSettings } from "@/components/PerformanceChart";
@@ -373,22 +373,76 @@ export default function Home() {
   const suggestions = useMemo(() => searchCatalog(query), [query]);
   const editSuggestions = useMemo(() => searchCatalog(editQuery), [editQuery]);
 
-  function addSymbol(sym: string) {
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupStatus, setLookupStatus] = useState<string | null>(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+
+  const [groupLookupLoadingId, setGroupLookupLoadingId] = useState<string | null>(null);
+  const [groupLookupStatus, setGroupLookupStatus] = useState<string | null>(null);
+  const [groupLookupErrors, setGroupLookupErrors] = useState<Record<string, string | null>>({});
+
+  const [refreshingGroupId, setRefreshingGroupId] = useState<string | null>(null);
+  const [refreshSuccessGroupId, setRefreshSuccessGroupId] = useState<string | null>(null);
+
+  async function addSymbol(sym: string) {
     const s = sym.trim().toUpperCase();
     if (!s || draftSymbols.includes(s)) return;
     if (draftSymbols.length >= MAX_SYMBOLS_PER_GROUP) {
       alert(T.maxSymbolsReached);
       return;
     }
-    setDraftSymbols([...draftSymbols, s]);
-    setQuery("");
+
+    setLookupError(null);
+
+    // If known in catalog, add immediately
+    const known = findEntry(s);
+    if (known) {
+      const canonical = known.symbol.toUpperCase();
+      if (!draftSymbols.includes(canonical)) {
+        setDraftSymbols([...draftSymbols, canonical]);
+      }
+      setQuery("");
+      return;
+    }
+
+    // Try multi-channel lookup online
+    setLookupLoading(true);
+    setLookupStatus(`${T.symbolLookupProgress} (${s})`);
+    try {
+      const res = await fetch("/api/symbol/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol: s }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        registerDynamicSymbol({
+          symbol: data.canonicalSymbol,
+          name: data.name,
+          nameEn: data.nameEn,
+          category: data.category || "Stock",
+        });
+        const canonical = data.canonicalSymbol.toUpperCase();
+        if (!draftSymbols.includes(canonical)) {
+          setDraftSymbols([...draftSymbols, canonical]);
+        }
+        setQuery("");
+      } else {
+        setLookupError(data.error || T.symbolNotFoundTips);
+      }
+    } catch (e) {
+      setLookupError(e instanceof Error ? e.message : "網路連線失敗，請稍後重試");
+    } finally {
+      setLookupLoading(false);
+      setLookupStatus(null);
+    }
   }
 
   function removeDraftSymbol(sym: string) {
     setDraftSymbols(draftSymbols.filter((s) => s !== sym));
   }
 
-  async function runBacktest(group: ComparisonGroup) {
+  async function runBacktest(group: ComparisonGroup, options?: { forceRefresh?: boolean }) {
     if (group.symbols.length === 0) return;
     setLoadingId(group.id);
     try {
@@ -399,6 +453,7 @@ export default function Home() {
           symbols: group.symbols,
           rangeYears: group.rangeYears,
           startValue: group.startValue ?? 1000,
+          forceRefresh: options?.forceRefresh ?? false,
         }),
       });
       const data = await res.json();
@@ -434,6 +489,20 @@ export default function Home() {
       }));
     } finally {
       setLoadingId(null);
+    }
+  }
+
+  async function refreshGroupData(group: ComparisonGroup) {
+    if (refreshingGroupId || loadingId) return;
+    setRefreshingGroupId(group.id);
+    try {
+      await runBacktest(group, { forceRefresh: true });
+      setRefreshSuccessGroupId(group.id);
+      setTimeout(() => {
+        setRefreshSuccessGroupId((prev) => (prev === group.id ? null : prev));
+      }, 4000);
+    } finally {
+      setRefreshingGroupId(null);
     }
   }
 
@@ -534,18 +603,64 @@ export default function Home() {
     });
   }
 
-  function addSymbolToGroup(group: ComparisonGroup, sym: string) {
+  async function addSymbolToGroup(group: ComparisonGroup, sym: string) {
     const s = sym.trim().toUpperCase();
     if (!s || group.symbols.includes(s)) return;
     if (group.symbols.length >= MAX_SYMBOLS_PER_GROUP) {
       alert(T.maxSymbolsReached);
       return;
     }
-    // Reset rangeFitted so maybeAutoFitRange will re-snap and calibrate
-    // the slider and backtest range to the group's new shortest symbol ceiling.
-    const updated = { ...group, symbols: [...group.symbols, s], rangeFitted: false };
-    updateGroup(updated, { rerun: true });
-    setEditQuery("");
+
+    setGroupLookupErrors((prev) => ({ ...prev, [group.id]: null }));
+
+    const known = findEntry(s);
+    if (known) {
+      const canonical = known.symbol.toUpperCase();
+      if (!group.symbols.includes(canonical)) {
+        const updated = { ...group, symbols: [...group.symbols, canonical], rangeFitted: false };
+        updateGroup(updated, { rerun: true });
+      }
+      setEditQuery("");
+      return;
+    }
+
+    setGroupLookupLoadingId(group.id);
+    setGroupLookupStatus(`${T.symbolLookupProgress} (${s})`);
+    try {
+      const res = await fetch("/api/symbol/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol: s }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        registerDynamicSymbol({
+          symbol: data.canonicalSymbol,
+          name: data.name,
+          nameEn: data.nameEn,
+          category: data.category || "Stock",
+        });
+        const canonical = data.canonicalSymbol.toUpperCase();
+        if (!group.symbols.includes(canonical)) {
+          const updated = { ...group, symbols: [...group.symbols, canonical], rangeFitted: false };
+          updateGroup(updated, { rerun: true });
+        }
+        setEditQuery("");
+      } else {
+        setGroupLookupErrors((prev) => ({
+          ...prev,
+          [group.id]: data.error || T.symbolNotFoundTips,
+        }));
+      }
+    } catch (e) {
+      setGroupLookupErrors((prev) => ({
+        ...prev,
+        [group.id]: e instanceof Error ? e.message : "網路連線失敗，請稍後重試",
+      }));
+    } finally {
+      setGroupLookupLoadingId(null);
+      setGroupLookupStatus(null);
+    }
   }
 
   function removeSymbolFromGroup(group: ComparisonGroup, sym: string) {
@@ -671,14 +786,18 @@ export default function Home() {
             <div className="relative flex-1">
               <input
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  if (lookupError) setLookupError(null);
+                }}
+                disabled={lookupLoading}
                 placeholder={T.searchPlaceholder}
-                className="field w-full px-3 py-2"
+                className="field w-full px-3 py-2 disabled:opacity-50"
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && query.trim()) addSymbol(query);
+                  if (e.key === "Enter" && query.trim() && !lookupLoading) addSymbol(query);
                 }}
               />
-              {query && suggestions.length > 0 && (
+              {query && suggestions.length > 0 && !lookupLoading && (
                 <ul
                   className="absolute z-10 mt-1 w-full card shadow-md max-h-64 overflow-auto"
                   style={{ background: "var(--surface)" }}
@@ -697,10 +816,44 @@ export default function Home() {
                 </ul>
               )}
             </div>
-            <button onClick={() => addSymbol(query)} className="btn-ghost px-4 py-2 text-sm">
-              {T.addSymbol}
+            <button
+              onClick={() => query.trim() && addSymbol(query)}
+              disabled={lookupLoading || !query.trim()}
+              className="btn-ghost px-4 py-2 text-sm shrink-0 flex items-center gap-1.5 disabled:opacity-40"
+            >
+              {lookupLoading && (
+                <span className="inline-block w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+              )}
+              <span>{lookupLoading ? T.running : T.addSymbol}</span>
             </button>
           </div>
+
+          {lookupLoading && (
+            <div className="flex items-center gap-2 text-xs py-2 px-3 rounded-md animate-pulse" style={{ background: "var(--background)", border: "1px solid var(--line)", color: "var(--foreground)" }}>
+              <span className="inline-block w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin shrink-0" />
+              <span>{lookupStatus || T.symbolLookupProgress}</span>
+            </div>
+          )}
+
+          {lookupError && (
+            <div className="flex items-start justify-between gap-3 text-xs py-2.5 px-3.5 rounded-lg" style={{ background: "rgba(239, 68, 68, 0.08)", border: "1px solid var(--negative)", color: "var(--negative)" }}>
+              <div className="flex flex-col gap-1">
+                <p className="font-semibold flex items-center gap-1">
+                  <span>⚠️</span>
+                  <span>{T.symbolNotFoundTitle}</span>
+                </p>
+                <p>{lookupError}</p>
+                <p className="opacity-80 mt-0.5">{T.symbolNotFoundTips}</p>
+              </div>
+              <button
+                onClick={() => setLookupError(null)}
+                className="font-bold hover:opacity-100 opacity-60 text-sm p-0.5"
+                title="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {draftSymbols.length > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -896,6 +1049,15 @@ export default function Home() {
                   </div>
                   <div className="flex flex-wrap gap-2 shrink-0">
                     <button
+                      onClick={() => refreshGroupData(g)}
+                      disabled={isLoading || refreshingGroupId === g.id || g.symbols.length === 0}
+                      className="btn-ghost px-3.5 py-1.5 text-sm flex items-center gap-1.5 disabled:opacity-40"
+                      title={T.refreshLatestData}
+                    >
+                      <span className={refreshingGroupId === g.id ? "animate-spin inline-block" : ""}>🔄</span>
+                      <span>{refreshingGroupId === g.id ? T.refreshing : T.refreshLatestData}</span>
+                    </button>
+                    <button
                       onClick={() => setEditingGroupId(isEditing ? null : g.id)}
                       className="btn-ghost px-3.5 py-1.5 text-sm"
                     >
@@ -910,6 +1072,13 @@ export default function Home() {
                     </button>
                   </div>
                 </div>
+
+                {refreshSuccessGroupId === g.id && (
+                  <div className="text-xs px-3.5 py-2 rounded-lg self-start flex items-center gap-2" style={{ background: "rgba(34, 197, 94, 0.1)", color: "#16a34a", border: "1px solid rgba(34, 197, 94, 0.25)" }}>
+                    <span>✓</span>
+                    <span>{T.refreshSuccess}</span>
+                  </div>
+                )}
 
                 {/* Edit symbols bar */}
                 {isEditing && (
@@ -935,14 +1104,22 @@ export default function Home() {
                       <div className="relative flex-1">
                         <input
                           value={editQuery}
-                          onChange={(e) => setEditQuery(e.target.value)}
+                          onChange={(e) => {
+                            setEditQuery(e.target.value);
+                            if (groupLookupErrors[g.id]) {
+                              setGroupLookupErrors((prev) => ({ ...prev, [g.id]: null }));
+                            }
+                          }}
+                          disabled={groupLookupLoadingId === g.id}
                           placeholder={T.addSymbolToGroup}
-                          className="field w-full px-3 py-2 text-sm"
+                          className="field w-full px-3 py-2 text-sm disabled:opacity-50"
                           onKeyDown={(e) => {
-                            if (e.key === "Enter" && editQuery.trim()) addSymbolToGroup(g, editQuery);
+                            if (e.key === "Enter" && editQuery.trim() && groupLookupLoadingId !== g.id) {
+                              addSymbolToGroup(g, editQuery);
+                            }
                           }}
                         />
-                        {editQuery && editSuggestions.length > 0 && (
+                        {editQuery && editSuggestions.length > 0 && groupLookupLoadingId !== g.id && (
                           <ul
                             className="absolute z-10 mt-1 w-full card shadow-md max-h-64 overflow-auto"
                             style={{ background: "var(--surface)" }}
@@ -963,12 +1140,42 @@ export default function Home() {
                       </div>
                       <button
                         onClick={() => editQuery.trim() && addSymbolToGroup(g, editQuery)}
-                        disabled={!editQuery.trim()}
-                        className="btn-ghost px-4 py-2 text-sm shrink-0 disabled:opacity-40"
+                        disabled={groupLookupLoadingId === g.id || !editQuery.trim()}
+                        className="btn-ghost px-4 py-2 text-sm shrink-0 flex items-center gap-1.5 disabled:opacity-40"
                       >
-                        {T.addSymbol}
+                        {groupLookupLoadingId === g.id && (
+                          <span className="inline-block w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                        )}
+                        <span>{groupLookupLoadingId === g.id ? T.running : T.addSymbol}</span>
                       </button>
                     </div>
+
+                    {groupLookupLoadingId === g.id && (
+                      <div className="flex items-center gap-2 text-xs py-2 px-3 rounded-md animate-pulse" style={{ background: "var(--surface)", border: "1px solid var(--line)" }}>
+                        <span className="inline-block w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin shrink-0" />
+                        <span>{groupLookupStatus || T.symbolLookupProgress}</span>
+                      </div>
+                    )}
+
+                    {groupLookupErrors[g.id] && (
+                      <div className="flex items-start justify-between gap-3 text-xs py-2.5 px-3.5 rounded-lg" style={{ background: "rgba(239, 68, 68, 0.08)", border: "1px solid var(--negative)", color: "var(--negative)" }}>
+                        <div className="flex flex-col gap-1">
+                          <p className="font-semibold flex items-center gap-1">
+                            <span>⚠️</span>
+                            <span>{T.symbolNotFoundTitle}</span>
+                          </p>
+                          <p>{groupLookupErrors[g.id]}</p>
+                          <p className="opacity-80 mt-0.5">{T.symbolNotFoundTips}</p>
+                        </div>
+                        <button
+                          onClick={() => setGroupLookupErrors((prev) => ({ ...prev, [g.id]: null }))}
+                          className="font-bold hover:opacity-100 opacity-60 text-sm p-0.5"
+                          title="Dismiss"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -991,13 +1198,27 @@ export default function Home() {
                   />
                 </div>
 
+                {isLoading && (
+                  <div className="flex items-center gap-2.5 text-xs py-2.5 px-4 rounded-lg animate-pulse" style={{ background: "var(--background)", border: "1px solid var(--line)", color: "var(--foreground-muted)" }}>
+                    <span className="inline-block w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin shrink-0" />
+                    <span>{refreshingGroupId === g.id ? T.refreshing : T.running}（{T.symbolLookupTrying}）</span>
+                  </div>
+                )}
+
                 {/* Analysis results */}
                 {result && (
                   <div className="flex flex-col gap-6">
                     {(result.errors ?? []).length > 0 && (
-                      <p className="text-xs" style={{ color: "var(--negative)" }}>
-                        {T.errorFetch}: {(result.errors ?? []).map((e) => displaySymbol(e.symbol, lang)).join(", ")}
-                      </p>
+                      <div className="rounded-lg p-3.5 text-xs flex flex-col gap-1.5" style={{ background: "rgba(239, 68, 68, 0.08)", border: "1px solid var(--negative)", color: "var(--negative)" }}>
+                        <p className="font-semibold flex items-center gap-1.5">
+                          <span>⚠️</span>
+                          <span>{T.errorFetch}: {(result.errors ?? []).map((e) => displaySymbol(e.symbol, lang)).join("、")}</span>
+                        </p>
+                        {(result.errors ?? []).map((e, idx) => (
+                          <p key={idx} className="opacity-90 font-mono text-[11px]">{e.symbol}: {e.message}</p>
+                        ))}
+                        <p className="opacity-80 mt-0.5">{T.symbolNotFoundTips}</p>
+                      </div>
                     )}
 
                     {result.alignedWindow && (

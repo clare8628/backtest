@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev, incomeProfile, simulateWithdrawnSeries } from "@/lib/backtest";
-import { parseStooqCsv, toStooqSymbol, toYahooSymbol, splitsUnreported, isTaiwanListed, symbolCandidates } from "@/lib/marketData";
-import { displaySymbol, fundSizeIn, getAssetClass, getCreditRating, getFundSize, getManagementFee, nativeCurrencyOf, searchCatalog } from "@/lib/symbolCatalog";
+import { parseStooqCsv, toStooqSymbol, toYahooSymbol, splitsUnreported, isTaiwanListed, symbolCandidates, lookupSymbol } from "@/lib/marketData";
+import { displaySymbol, findEntry, fundSizeIn, getAssetClass, getCreditRating, getFundSize, getManagementFee, nativeCurrencyOf, registerDynamicSymbol, searchCatalog } from "@/lib/symbolCatalog";
 import { PricePoint, BacktestMetrics } from "@/lib/types";
 
 function series(closes: number[]): PricePoint[] {
@@ -704,4 +704,50 @@ describe("simulateWithdrawnSeries", () => {
     expect(result.depletedDate).toBe("2024-01-01");
   });
 });
+
+describe("registerDynamicSymbol", () => {
+  it("allows registering and searching dynamic symbols at runtime", () => {
+    registerDynamicSymbol({
+      symbol: "TEST_DYNAMIC",
+      name: "動態測試標的",
+      nameEn: "Dynamic Test Stock",
+      category: "Stock",
+    });
+    const found = findEntry("TEST_DYNAMIC");
+    expect(found?.name).toBe("動態測試標的");
+    const results = searchCatalog("動態測試");
+    expect(results.some((r) => r.symbol === "TEST_DYNAMIC")).toBe(true);
+  });
+});
+
+describe("lookupSymbol", () => {
+  it("resolves catalog symbols immediately", async () => {
+    const res = await lookupSymbol("VOO");
+    expect(res.found).toBe(true);
+    expect(res.canonicalSymbol).toBe("VOO");
+    expect(res.currency).toBe("USD");
+  });
+
+  it("looks up real online stock/ETF symbols not in static catalog", async () => {
+    const res = await lookupSymbol("SMH");
+    expect(res.found).toBe(true);
+    expect(res.canonicalSymbol).toBe("SMH");
+    expect(res.currency).toBe("USD");
+    expect(res.name).toBeTruthy();
+  }, 10000);
+
+  it("handles empty symbols gracefully", async () => {
+    const res = await lookupSymbol("   ");
+    expect(res.found).toBe(false);
+    expect(res.error).toBe("標的代號不能為空");
+  });
+
+  it("reports channelsTried and error when symbol does not exist", async () => {
+    const res = await lookupSymbol("NON_EXISTENT_XYZ_9999");
+    expect(res.found).toBe(false);
+    expect(res.error).toContain("NON_EXISTENT_XYZ_9999");
+    expect(res.channelsTried?.length).toBeGreaterThan(0);
+  });
+});
+
 

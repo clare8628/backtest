@@ -300,9 +300,25 @@ export function getManagementFee(symbol: string): number {
   return findEntry(symbol)?.expenseRatio ?? 0;
 }
 
-function findEntry(symbol: string): CatalogEntry | undefined {
+const DYNAMIC_CATALOG: Map<string, CatalogEntry> = new Map();
+
+/**
+ * Register a symbol dynamically at runtime (e.g. after successful multi-channel lookup).
+ * Makes it searchable and recognized across the UI, metrics, and labels.
+ */
+export function registerDynamicSymbol(entry: CatalogEntry) {
+  const key = entry.symbol.trim().toUpperCase();
+  DYNAMIC_CATALOG.set(key, entry);
+}
+
+export function findEntry(symbol: string): CatalogEntry | undefined {
   const key = symbol.trim().toUpperCase();
-  return SYMBOL_CATALOG.find((e) => e.symbol.toUpperCase() === key);
+  return (
+    DYNAMIC_CATALOG.get(key) ||
+    DYNAMIC_CATALOG.get(`${key}.TW`) ||
+    DYNAMIC_CATALOG.get(`${key}.TWO`) ||
+    SYMBOL_CATALOG.find((e) => e.symbol.toUpperCase() === key)
+  );
 }
 
 /** Whether getManagementFee's answer is a real published figure rather than
@@ -441,8 +457,10 @@ function matchRank(e: CatalogEntry, q: string): number {
 
 export function searchCatalog(query: string): CatalogEntry[] {
   const q = query.trim().toLowerCase();
-  if (!q) return SYMBOL_CATALOG.slice(0, 8);
-  return SYMBOL_CATALOG.map((e) => ({ e, rank: matchRank(e, q) }))
+  const allEntries = [...Array.from(DYNAMIC_CATALOG.values()), ...SYMBOL_CATALOG];
+  if (!q) return allEntries.slice(0, 8);
+  return allEntries
+    .map((e) => ({ e, rank: matchRank(e, q) }))
     .filter(({ rank }) => rank >= 0)
     .sort((a, b) => a.rank - b.rank)
     .slice(0, 8)

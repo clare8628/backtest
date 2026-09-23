@@ -110,3 +110,21 @@
   - 類別：Bond ETF，資產類別：美國公債，信用評級：AA+（美國主權），內扣費用率：0.03%
   - 支援搜尋（代號、英文名、中文名）與快速加入回測
 - 測試 83/83 通過、TypeScript 檢查通過、建置成功。
+
+更新 (2026-09-23b)：
+- 動態多管道即時行情檢索機制：
+  - 當使用者輸入不在靜態標的庫中的真實台美股/ETF（如美股 SMH、SCHD、PLTR 或台股 2330、6547.TWO），自動依序透過多重管道探測行情：
+    1. 主要管道：Yahoo Finance Query 1 API
+    2. 備援管道 A：Yahoo Finance Query 2 API（防 429 速率限制與節點異常）
+    3. 備援管道 B：Yahoo Search API
+    4. 備援管道 C（台股專屬）：TWSE / TPEx 官方 OpenAPI 及 MIS 即時系統，精準擷取官方中文名稱（如「台積電」）與幣別
+    5. 備援管道 D：Stooq CSV 備用端點
+  - 新增專屬探測端點 `POST /api/symbol/lookup`，並實作執行期動態標的目錄（Runtime Dynamic Catalog）。
+- 連線進度與狀態顯示（Progress Tracking）：
+  - 新增標的輸入階段提供微動態進度提示（「正在透過多管道查詢標的行情...」），明確顯示連線狀態。
+  - 回測運算與資料同步時顯示讀取進度條與正在嘗試之管道說明，消除使用者疑慮。
+- 防呆錯誤提醒（Nonexistent Symbol Alert）：
+  - 若所有管道皆查無此標的，前端呈現醒目之紅色錯誤警告卡片，包含具體錯誤原因與常用台美股格式範例（美股如 AAPL，台股如 2330 或 0050.TW），不干擾既有組合。
+- 線上最新數據同步（Refresh Latest Data）：
+  - 在展開的比較組操作列中新增「🔄 更新最新數據」按鈕，傳入 `forceRefresh: true` 略過快取向行情節點即時拉取最新收盤與除息數據，並附帶完成提示。
+- 測試 88/88 全數通過、TypeScript 檢查通過、Next.js Production Build 編譯成功。

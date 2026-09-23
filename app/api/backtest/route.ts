@@ -62,6 +62,8 @@ export async function POST(req: NextRequest) {
     const startValue: number =
       typeof body?.startValue === "number" && body.startValue > 0 ? body.startValue : 1000;
 
+    const forceRefresh: boolean = Boolean(body?.forceRefresh);
+
     if (symbols.length === 0) {
       return NextResponse.json(
         { error: "symbols is required", metrics: [], recommendations: [], chartSeries: [], errors: [] },
@@ -85,8 +87,8 @@ export async function POST(req: NextRequest) {
     // parallel low-cost fetch purely to learn each symbol's true native date
     // span for the "max backtestable years" ceiling (see CEILING_FETCH_YEARS).
     const [{ results, errors }, { results: ceilingResults }] = await Promise.all([
-      fetchMultiple(symbols, rangeYears),
-      fetchMultiple(symbols, CEILING_FETCH_YEARS),
+      fetchMultiple(symbols, rangeYears, forceRefresh),
+      fetchMultiple(symbols, CEILING_FETCH_YEARS, forceRefresh),
     ]);
 
     // Each symbol's own maximum backtestable history, independent of the
@@ -132,7 +134,7 @@ export async function POST(req: NextRequest) {
         try {
           const prices = existing
             ? existing.prices
-            : (await fetchDailyPrices(benchmarkSymbol, rangeYears)).prices;
+            : (await fetchDailyPrices(benchmarkSymbol, rangeYears, forceRefresh)).prices;
           benchmarkReturns.set(benchmarkSymbol, dailyReturnsWithDates(prices));
         } catch {
           // Benchmark unavailable — Beta will be reported as null (not guessed).
@@ -152,7 +154,7 @@ export async function POST(req: NextRequest) {
     let rateAt: ((date: string) => number | null) | null = null;
     if (mixedCurrencies) {
       try {
-        const fx = await fetchDailyPrices(USD_TWD_FX_SYMBOL, rangeYears);
+        const fx = await fetchDailyPrices(USD_TWD_FX_SYMBOL, rangeYears, forceRefresh);
         rateAt = fxLookup(fx.prices);
       } catch {
         rateAt = null; // FX unavailable — chart falls back to native-currency-only per symbol.
