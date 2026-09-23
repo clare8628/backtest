@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev, incomeProfile, simulateWithdrawnSeries } from "@/lib/backtest";
 import { parseStooqCsv, toStooqSymbol, toYahooSymbol, splitsUnreported, isTaiwanListed, symbolCandidates } from "@/lib/marketData";
-import { displaySymbol, fundSizeIn, getFundSize, nativeCurrencyOf } from "@/lib/symbolCatalog";
+import { displaySymbol, fundSizeIn, getAssetClass, getCreditRating, getFundSize, getManagementFee, nativeCurrencyOf, searchCatalog } from "@/lib/symbolCatalog";
 import { PricePoint, BacktestMetrics } from "@/lib/types";
 
 function series(closes: number[]): PricePoint[] {
@@ -659,6 +659,18 @@ describe("nativeCurrencyOf", () => {
     expect(nativeCurrencyOf("0050.TW")).toBe("TWD");
     expect(nativeCurrencyOf("00687B.TWO")).toBe("TWD");
     expect(nativeCurrencyOf("TLT")).toBe("USD");
+    expect(nativeCurrencyOf("VGLT")).toBe("USD");
+  });
+});
+
+describe("catalog entry for VGLT", () => {
+  it("resolves expense ratio, asset class, and credit rating correctly", () => {
+    expect(getManagementFee("VGLT")).toBe(0.03);
+    expect(getAssetClass("VGLT")).toBe("美國公債");
+    expect(getCreditRating("VGLT")).toBe("AA+（美國主權）");
+    expect(displaySymbol("VGLT")).toBe("VGLT");
+    const results = searchCatalog("vglt");
+    expect(results[0]?.symbol).toBe("VGLT");
   });
 });
 

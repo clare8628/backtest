@@ -104,3 +104,9 @@
 更新 (2026-09-09)：
 - 修復 BRK.B 類股抓取失敗：Yahoo/Stooq chart API 只認連字號形式（BRK-B），點號形式回「symbol may be delisted」。新增 toYahooSymbol()，US 類股票代號（字母.字母）於 Yahoo 與 Stooq 查詢時轉為連字號，目錄與 UI 仍顯示 BRK.B。
 - 測試 80/80 通過、tsc 通過、已部署 Cloudflare Workers（Version ID: 308f14df-5069-4c8e-8bde-b0791f07fad7），線上實測 BRK.B 回測 errors: []。
+
+更新 (2026-09-23)：
+- 標的庫新增 VGLT（Vanguard 長期美國公債 ETF / Vanguard Long-Term Treasury ETF）：
+  - 類別：Bond ETF，資產類別：美國公債，信用評級：AA+（美國主權），內扣費用率：0.03%
+  - 支援搜尋（代號、英文名、中文名）與快速加入回測
+- 測試 83/83 通過、TypeScript 檢查通過、建置成功。

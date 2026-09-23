@@ -137,6 +137,7 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   // --- US-listed bond ETFs. assetClass/creditRating reflect each fund's stated
   // mandate; expense ratios are the published figures Yahoo reports for them.
   { symbol: "TLT", name: "iShares 20年期以上美國公債 ETF", nameEn: "iShares 20+ Year Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 41543831552 },
+  { symbol: "VGLT", name: "Vanguard 長期美國公債 ETF", nameEn: "Vanguard Long-Term Treasury ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
   { symbol: "IEF", name: "iShares 7-10年期美國公債 ETF", nameEn: "iShares 7-10 Year Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 47187439616 },
   { symbol: "SHY", name: "iShares 1-3年期美國公債 ETF", nameEn: "iShares 1-3 Year Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 25080700928 },
   { symbol: "GOVT", name: "iShares 美國公債 ETF", nameEn: "iShares U.S. Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.05, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 43550478336 },
