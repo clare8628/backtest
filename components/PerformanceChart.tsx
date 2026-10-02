@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { ChartSeries, Currency } from "@/lib/types";
 import { Lang, t } from "@/lib/i18n";
-import { displaySymbol, symbolLabel } from "@/lib/symbolCatalog";
+import { symbolLabel } from "@/lib/symbolCatalog";
 import { simulateWithdrawnSeries } from "@/lib/backtest";
 
 // 現代金融精緻高對比調色盤（兼顧高辨識度、色盲友善與 Equals 品牌質感）
@@ -231,17 +231,15 @@ export default function PerformanceChart({
   const [hoverT, setHoverT] = useState<number | null>(null);
   const [hoveredCrisisDate, setHoveredCrisisDate] = useState<string | null>(null);
 
-  if (plotted.length === 0) return null;
-
   const allT = plotted.flatMap((s) => s.points.map((p) => p.t));
   const allV = [
     ...plotted.flatMap((s) => s.points.map((p) => p.value)),
     ...(simEnabled ? plottedWithdrawn.flatMap((s) => s.points.map((p) => p.value)) : []),
   ];
-  const tMin = Math.min(...allT);
-  const tMax = Math.max(...allT);
-  const minV = Math.min(...allV);
-  const maxV = Math.max(...allV);
+  const tMin = allT.length > 0 ? Math.min(...allT) : 0;
+  const tMax = allT.length > 0 ? Math.max(...allT) : 1;
+  const minV = allV.length > 0 ? Math.min(...allV) : 0;
+  const maxV = allV.length > 0 ? Math.max(...allV) : 100;
 
   let yMin: number;
   let yMax: number;
@@ -374,6 +372,7 @@ export default function PerformanceChart({
       }
     }
     return closest ? closest.crisis : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoverX, visibleCrises]);
 
   // 作用中的重大事件（優先使用直接 hover 的，次為鄰近磁吸感測到的）
@@ -395,6 +394,7 @@ export default function PerformanceChart({
       }
     }
     return closest ? closest.split : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoverX, showSplits, visibleSplits]);
 
   // 作用中的股票分割事件（優先使用直接 hover 的，次為鄰近磁吸感測到的）
@@ -458,6 +458,8 @@ export default function PerformanceChart({
       : 0;
 
   const tooltipY = Math.min(padding.top + 8, height - tooltipH - padding.bottom);
+
+  if (plotted.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-3">
