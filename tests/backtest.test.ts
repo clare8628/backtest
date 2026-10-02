@@ -847,6 +847,21 @@ describe("ETF Split Events Tracking [BAC-1]", () => {
     expect(metrics.splitCount).toBeUndefined();
     expect(metrics.splits).toBeUndefined();
   });
+
+  it("handles series with empty splits array in computeMetrics", () => {
+    const sampleSeries: SymbolSeries = {
+      symbol: "SPY",
+      prices: [
+        { date: "2021-01-01", close: 100 },
+        { date: "2023-01-01", close: 130 },
+      ],
+      splits: [],
+    };
+
+    const metrics = computeMetrics(sampleSeries);
+    expect(metrics.splitCount).toBe(0);
+    expect(metrics.splits).toEqual([]);
+  });
 });
 
 
