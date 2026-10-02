@@ -79,6 +79,8 @@ export interface BacktestMetrics {
    *  even after a huge cumulative return, since Yahoo's close price is
    *  already split-adjusted and unaffected either way. */
   splitCount?: number;
+  /** Stock/ETF split events that occurred within the backtest window */
+  splits?: SplitEvent[];
   /** Income profile, for judging a holding as retirement cash flow rather than
    *  capital gain. assetClass/creditRating are curated (see symbolCatalog);
    *  fundSize is a dated snapshot (see FUND_SIZE_AS_OF) quoted in
@@ -149,4 +151,6 @@ export interface ChartSeries {
   symbol: string;
   currency: Currency; // the symbol's native trading currency
   points: ChartPoint[];
+  /** Stock/ETF split events within the chart range */
+  splits?: SplitEvent[];
 }

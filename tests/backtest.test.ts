@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev, incomeProfile, simulateWithdrawnSeries } from "@/lib/backtest";
+import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, downsamplePrices, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev, incomeProfile, simulateWithdrawnSeries } from "@/lib/backtest";
 import { parseStooqCsv, toStooqSymbol, toYahooSymbol, splitsUnreported, isTaiwanListed, symbolCandidates, lookupSymbol } from "@/lib/marketData";
 import { displaySymbol, findEntry, fundSizeIn, getAssetClass, getCreditRating, getFundSize, getManagementFee, nativeCurrencyOf, registerDynamicSymbol, searchCatalog } from "@/lib/symbolCatalog";
 import { PricePoint, BacktestMetrics } from "@/lib/types";
@@ -749,5 +749,70 @@ describe("lookupSymbol", () => {
     expect(res.channelsTried?.length).toBeGreaterThan(0);
   });
 });
+
+describe("downsamplePrices with split dates", () => {
+  it("preserves exact split dates even when maxPoints is small", () => {
+    // 500 daily price points
+    const prices: PricePoint[] = Array.from({ length: 500 }, (_, i) => ({
+      date: new Date(Date.UTC(2022, 0, 1) + i * 86_400_000).toISOString().slice(0, 10),
+      close: 100 + i * 0.1,
+    }));
+
+    const splitDates = ["2022-01-13", "2022-06-15"];
+    const sampled = downsamplePrices(prices, 50, splitDates);
+
+    // Both split dates must be present in the sampled points
+    const sampledDates = new Set(sampled.map((p) => p.date));
+    expect(sampledDates.has("2022-01-13")).toBe(true);
+    expect(sampledDates.has("2022-06-15")).toBe(true);
+
+    // Verify ordering
+    for (let i = 1; i < sampled.length; i++) {
+      expect(sampled[i].date > sampled[i - 1].date).toBe(true);
+    }
+  });
+
+  it("handles empty or nonexistent mustIncludeDates without errors", () => {
+    const prices = series([10, 20, 30, 40, 50]);
+    const sampled = downsamplePrices(prices, 3, ["2099-01-01"]);
+    expect(sampled.length).toBeGreaterThan(0);
+    expect(sampled[0].date).toBe("2024-01-01");
+    expect(sampled[sampled.length - 1].date).toBe("2024-01-05");
+  });
+});
+
+describe("ETF Split Events Tracking [BAC-1]", () => {
+  it("tracks ETF with 2 splits and counts them correctly within the backtest window", () => {
+    // 模擬某隻 ETF 經歷 2 次分割（例如 TQQQ）
+    const splits = [
+      { date: "2022-01-13", ratio: "2:1" },
+      { date: "2025-11-20", ratio: "2:1" },
+    ];
+
+    const window = { start: "2021-01-01", end: "2026-01-01" };
+    const windowSplits = splits.filter((sp) => sp.date >= window.start && sp.date <= window.end);
+
+    expect(windowSplits.length).toBe(2);
+    expect(windowSplits[0].date).toBe("2022-01-13");
+    expect(windowSplits[1].date).toBe("2025-11-20");
+    expect(windowSplits[0].ratio).toBe("2:1");
+    expect(windowSplits[1].ratio).toBe("2:1");
+  });
+
+  it("filters out splits outside the aligned backtest window", () => {
+    const splits = [
+      { date: "2018-05-24", ratio: "3:1" }, // outside 2021-2026
+      { date: "2022-01-13", ratio: "2:1" },
+      { date: "2025-11-20", ratio: "2:1" },
+    ];
+
+    const window = { start: "2021-01-01", end: "2026-01-01" };
+    const windowSplits = splits.filter((sp) => sp.date >= window.start && sp.date <= window.end);
+
+    expect(windowSplits.length).toBe(2);
+    expect(windowSplits.map((s) => s.date)).toEqual(["2022-01-13", "2025-11-20"]);
+  });
+});
+
 
 

@@ -412,15 +412,32 @@ export function normalizeToIndex(prices: PricePoint[], maxPoints = 120): Indexed
 }
 
 /** Downsamples a price series for lightweight charting, keeping raw close
- *  values (unlike normalizeToIndex, which re-bases everything to 100). */
-export function downsamplePrices(prices: PricePoint[], maxPoints = 120): PricePoint[] {
+ *  values (unlike normalizeToIndex, which re-bases everything to 100).
+ *  Optionally ensures specific dates (e.g. split dates) are preserved in the sampled series. */
+export function downsamplePrices(
+  prices: PricePoint[],
+  maxPoints = 120,
+  mustIncludeDates: string[] = []
+): PricePoint[] {
   if (prices.length === 0) return [];
   const step = Math.max(1, Math.floor(prices.length / maxPoints));
-  const sampled: PricePoint[] = [];
-  for (let i = 0; i < prices.length; i += step) sampled.push(prices[i]);
+  const sampledMap = new Map<string, PricePoint>();
+  for (let i = 0; i < prices.length; i += step) {
+    sampledMap.set(prices[i].date, prices[i]);
+  }
   const last = prices[prices.length - 1];
-  if (sampled[sampled.length - 1].date !== last.date) sampled.push(last);
-  return sampled;
+  sampledMap.set(last.date, last);
+
+  if (mustIncludeDates.length > 0) {
+    const datesSet = new Set(mustIncludeDates);
+    for (const p of prices) {
+      if (datesSet.has(p.date)) {
+        sampledMap.set(p.date, p);
+      }
+    }
+  }
+
+  return Array.from(sampledMap.values()).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
 /**

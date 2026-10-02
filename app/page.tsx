@@ -229,7 +229,25 @@ function metricSections(
           label: T.fee,
           value: (m) => (m.managementFeeKnown === false ? DASH : pct(m.managementFee)),
         },
-        { label: T.splitCount, value: (m) => num(m.splitCount) },
+        {
+          label: T.splitCount,
+          value: (m) => {
+            if (m.splitCount === undefined || m.splitCount === null) return DASH;
+            const countStr = lang === "zh" ? `${m.splitCount} 次` : String(m.splitCount);
+            if (m.splits && m.splits.length > 0) {
+              const tooltip = m.splits.map((s) => `${s.date} (${s.ratio})`).join(", ");
+              return (
+                <span title={`${T.splitDate}: ${tooltip}`} className="cursor-help inline-flex flex-col items-end leading-tight">
+                  <span className="font-semibold">{countStr}</span>
+                  <span className="text-[10px] opacity-70 font-normal">
+                    {m.splits.map((s) => `${s.date.slice(0, 7)} [${s.ratio}]`).join(", ")}
+                  </span>
+                </span>
+              );
+            }
+            return countStr;
+          },
+        },
       ],
     },
   ];

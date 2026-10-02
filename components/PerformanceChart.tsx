@@ -91,6 +91,16 @@ interface PlottedPoint {
   value: number;
 }
 
+export interface VisibleSplit {
+  symbol: string;
+  seriesIndex: number;
+  color: string;
+  date: string;
+  ratio: string;
+  t: number;
+  point: PlottedPoint | null;
+}
+
 function priceOf(currency: Currency, p: { priceUSD: number | null; priceTWD: number | null }): number | null {
   return currency === "USD" ? p.priceUSD : p.priceTWD;
 }
@@ -150,6 +160,10 @@ export default function PerformanceChart({
   // 標的聚焦高亮狀態（Hover Focus）
   const [hoveredSymbol, setHoveredSymbol] = useState<string | null>(null);
 
+  // 股票分割標註開關與 Hover 狀態
+  const [showSplits, setShowSplits] = useState<boolean>(true);
+  const [hoveredSplitKey, setHoveredSplitKey] = useState<string | null>(null);
+
   // 退休提領模擬設定
   const [localSimEnabled, setLocalSimEnabled] = useState<boolean>(false);
   const [localWithdrawalRate, setLocalWithdrawalRate] = useState<number>(3);
@@ -178,6 +192,7 @@ export default function PerformanceChart({
     const raw = series
       .map((s) => ({
         symbol: s.symbol,
+        splits: s.splits,
         points: s.points
           .map((p) => {
             const value = priceOf(activeCurrency, p);
@@ -190,7 +205,7 @@ export default function PerformanceChart({
     if (mode === "price") return raw;
     return raw.map((s) => {
       const base = s.points[0].value || 1;
-      return { symbol: s.symbol, points: s.points.map((p) => ({ ...p, value: (p.value / base) * 100 })) };
+      return { symbol: s.symbol, splits: s.splits, points: s.points.map((p) => ({ ...p, value: (p.value / base) * 100 })) };
     });
   }, [series, activeCurrency, mode]);
 
@@ -302,6 +317,31 @@ export default function PerformanceChart({
     return best;
   }
 
+  // 範圍內可見之股票分割事件
+  const visibleSplits = useMemo<VisibleSplit[]>(() => {
+    const list: VisibleSplit[] = [];
+    plotted.forEach((s, idx) => {
+      const color = SERIES_COLORS[idx % SERIES_COLORS.length];
+      if (!s.splits || s.splits.length === 0) return;
+      for (const sp of s.splits) {
+        const t = new Date(sp.date).getTime();
+        if (t >= tMin && t <= tMax) {
+          const pt = nearestPoint(s.points, t);
+          list.push({
+            symbol: s.symbol,
+            seriesIndex: idx,
+            color,
+            date: sp.date,
+            ratio: sp.ratio,
+            t,
+            point: pt,
+          });
+        }
+      }
+    });
+    return list.sort((a, b) => a.t - b.t);
+  }, [plotted, tMin, tMax]);
+
   const hoverPoints =
     hoverT !== null
       ? plotted.map((s, idx) => {
@@ -341,6 +381,27 @@ export default function PerformanceChart({
     ? visibleCrises.find((c) => c.date === hoveredCrisisDate) ?? null
     : nearestCrisis;
 
+  // ========== 股票分割點鄰近磁吸感測 (Proximity Detection) ==========
+  const nearestSplit = useMemo(() => {
+    if (hoverX === null || !showSplits || visibleSplits.length === 0) return null;
+    let closest: { split: VisibleSplit; dist: number } | null = null;
+    for (const sp of visibleSplits) {
+      const spX = xFor(sp.t);
+      const dist = Math.abs(hoverX - spX);
+      if (dist <= PROXIMITY_THRESHOLD) {
+        if (!closest || dist < closest.dist) {
+          closest = { split: sp, dist };
+        }
+      }
+    }
+    return closest ? closest.split : null;
+  }, [hoverX, showSplits, visibleSplits]);
+
+  // 作用中的股票分割事件（優先使用直接 hover 的，次為鄰近磁吸感測到的）
+  const activeSplit = hoveredSplitKey
+    ? visibleSplits.find((s) => `${s.symbol}-${s.date}` === hoveredSplitKey) ?? null
+    : nearestSplit;
+
   function handleMove(e: React.MouseEvent<SVGSVGElement>) {
     const el = svgRef.current;
     if (!el) return;
@@ -377,6 +438,7 @@ export default function PerformanceChart({
     Math.max(
       220,
       activeCrisis ? labelWidth(lang === "zh" ? activeCrisis.zh : activeCrisis.en) + 24 : 0,
+      activeSplit ? labelWidth(`${activeSplit.symbol} ${activeSplit.ratio} ${activeSplit.date}`) + 40 : 0,
       ...tooltipDataRows.map((r) => textWidth(`${r.code} ${r.valueStr} (${r.pctStr})`, 9.5) + 36)
     )
   );
@@ -384,6 +446,7 @@ export default function PerformanceChart({
   const tooltipH =
     42 +
     (activeCrisis ? 28 : 0) +
+    (activeSplit ? 28 : 0) +
     tooltipDataRows.length * (simEnabled ? 32 : 22);
 
   // Tooltip 座標防溢出
@@ -473,6 +536,33 @@ export default function PerformanceChart({
               </div>
             )}
           </div>
+
+          {/* 股票分割標註開關 */}
+          {visibleSplits.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowSplits((v) => !v)}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full border transition-all cursor-pointer font-medium"
+              style={{
+                borderColor: showSplits ? "var(--orchid-ink)" : "var(--line)",
+                background: showSplits ? "rgba(142, 79, 174, 0.08)" : "transparent",
+                color: showSplits ? "var(--orchid-ink)" : "inherit",
+              }}
+              title={lang === "zh" ? "標註或隱藏走勢圖上的分割時間點" : "Toggle split markers on chart"}
+            >
+              <span>✂</span>
+              <span>{T.toggleSplits}</span>
+              <span
+                className="px-1.5 py-0.2 rounded-full text-[10px] font-bold"
+                style={{
+                  background: showSplits ? "var(--orchid-ink)" : "var(--line)",
+                  color: showSplits ? "white" : "inherit",
+                }}
+              >
+                {visibleSplits.length}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* 右側刻度與幣別切換 */}
@@ -543,6 +633,7 @@ export default function PerformanceChart({
           onMouseLeave={() => {
             setHoverT(null);
             setHoveredCrisisDate(null);
+            setHoveredSplitKey(null);
           }}
         >
           {/* 精緻濾鏡與陰影定義 */}
@@ -772,6 +863,30 @@ export default function PerformanceChart({
             );
           })}
 
+          {/* 股票分割垂直引導軸線 (Stock Split Vertical Guidelines) */}
+          {showSplits &&
+            visibleSplits.map((sp) => {
+              const spX = xFor(sp.t);
+              const isNear = activeSplit?.symbol === sp.symbol && activeSplit?.date === sp.date;
+              const isSeriesHovered = hoveredSymbol === sp.symbol;
+              const isDimmed = hoveredSymbol !== null && !isSeriesHovered;
+
+              return (
+                <line
+                  key={`split-line-${sp.symbol}-${sp.date}`}
+                  x1={spX}
+                  x2={spX}
+                  y1={padding.top}
+                  y2={height - padding.bottom}
+                  stroke={sp.color}
+                  strokeOpacity={isDimmed ? 0.15 : isNear ? 0.95 : 0.45}
+                  strokeWidth={isNear ? 2 : 1.2}
+                  strokeDasharray={isNear ? undefined : "3,3"}
+                  className="transition-all duration-200"
+                />
+              );
+            })}
+
           {/* 走勢主要曲線 (Series Lines) */}
           {plotted.map((s, idx) => {
             const color = SERIES_COLORS[idx % SERIES_COLORS.length];
@@ -891,6 +1006,90 @@ export default function PerformanceChart({
             );
           })}
 
+          {/* 股票分割點標註與時間標籤 (Stock Split Nodes & Date Badges) */}
+          {showSplits &&
+            visibleSplits.map((sp, idx) => {
+              const spX = xFor(sp.t);
+              const spY = sp.point ? yFor(sp.point.value) : padding.top + innerH / 2;
+              const isNear = activeSplit?.symbol === sp.symbol && activeSplit?.date === sp.date;
+              const isSeriesHovered = hoveredSymbol === sp.symbol;
+              const isDimmed = hoveredSymbol !== null && !isSeriesHovered;
+              const key = `${sp.symbol}-${sp.date}`;
+              const { code } = symbolLabel(sp.symbol, lang);
+              const label = `${code} ${sp.date} (${sp.ratio})`;
+              const labelW = textWidth(label, 8.5) + 16;
+              const badgeY = padding.top + 6 + ((idx % 2) * 18);
+              const badgeX = Math.max(padding.left + 2, Math.min(width - padding.right - labelW - 2, spX - labelW / 2));
+
+              return (
+                <g
+                  key={`split-marker-${key}`}
+                  className="transition-all duration-200"
+                  style={{ opacity: isDimmed ? 0.22 : 1 }}
+                  onMouseEnter={() => setHoveredSplitKey(key)}
+                  onMouseLeave={() => setHoveredSplitKey((cur) => (cur === key ? null : cur))}
+                >
+                  {/* 頂部分割時間標籤 (Top Split Date Badge) */}
+                  <g transform={`translate(${badgeX}, ${badgeY})`}>
+                    <rect
+                      x={0}
+                      y={0}
+                      width={labelW}
+                      height={17}
+                      rx={3.5}
+                      fill="var(--surface)"
+                      stroke={sp.color}
+                      strokeWidth={isNear ? 1.8 : 1}
+                      filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.12))"
+                    />
+                    <text
+                      x={labelW / 2}
+                      y={12}
+                      fontSize={8.5}
+                      fontWeight={isNear ? 700 : 600}
+                      fill={sp.color}
+                      textAnchor="middle"
+                    >
+                      ✂ {label}
+                    </text>
+                  </g>
+
+                  {/* 曲線上的分割節點標記 (Split Node on Curve) */}
+                  {isNear && (
+                    <circle
+                      cx={spX}
+                      cy={spY}
+                      r={10}
+                      fill="none"
+                      stroke={sp.color}
+                      strokeWidth={1.5}
+                      strokeOpacity={0.4}
+                      className="animate-pulse"
+                    />
+                  )}
+                  <circle
+                    cx={spX}
+                    cy={spY}
+                    r={isNear ? 5.5 : 4.2}
+                    fill={sp.color}
+                    stroke="var(--surface)"
+                    strokeWidth={1.6}
+                    className="transition-all duration-150"
+                  />
+
+                  {/* 擴大的互動熱區 (寬 28px) */}
+                  <rect
+                    x={spX - 14}
+                    y={padding.top}
+                    width={28}
+                    height={innerH}
+                    fill="transparent"
+                    style={{ cursor: "pointer" }}
+                  />
+                </g>
+              );
+            })}
+
           {/* 滑鼠垂直時間引導線與節點 (Crosshair) */}
           {hoverX !== null && (
             <>
@@ -991,19 +1190,45 @@ export default function PerformanceChart({
                 </g>
               )}
 
+              {/* 股票分割事件突出橫幅 (若靠近分割時間點) */}
+              {activeSplit && (
+                <g transform={`translate(10, ${activeCrisis ? 52 : 26})`}>
+                  <rect
+                    x={0}
+                    y={0}
+                    width={tooltipW - 20}
+                    height={22}
+                    rx={4}
+                    fill="var(--background)"
+                    stroke={activeSplit.color}
+                    strokeWidth={1.2}
+                  />
+                  <text
+                    x={8}
+                    y={15}
+                    fontSize={9.5}
+                    fontWeight={700}
+                    fill={activeSplit.color}
+                  >
+                    ✂ {symbolLabel(activeSplit.symbol, lang).code} {T.splitEvent}：{activeSplit.ratio} ({activeSplit.date})
+                  </text>
+                </g>
+              )}
+
               {/* 分隔細線 */}
               <line
                 x1={10}
                 x2={tooltipW - 10}
-                y1={activeCrisis ? 54 : 26}
-                y2={activeCrisis ? 54 : 26}
+                y1={26 + (activeCrisis ? 28 : 0) + (activeSplit ? 28 : 0)}
+                y2={26 + (activeCrisis ? 28 : 0) + (activeSplit ? 28 : 0)}
                 stroke="var(--line)"
                 strokeWidth={0.8}
               />
 
               {/* 各標的數據列 */}
               {tooltipDataRows.map((row, rIdx) => {
-                const startY = (activeCrisis ? 68 : 40) + rIdx * (simEnabled ? 30 : 20);
+                const baseStartY = 40 + (activeCrisis ? 28 : 0) + (activeSplit ? 28 : 0);
+                const startY = baseStartY + rIdx * (simEnabled ? 30 : 20);
 
                 return (
                   <g key={row.symbol}>
@@ -1128,6 +1353,41 @@ export default function PerformanceChart({
           {mode === "price" ? `(${activeCurrency})` : lang === "zh" ? "(指數化＝100)" : "(Index=100)"}
         </span>
       </div>
+
+      {/* 期間股票分割事件摘要清單 */}
+      {showSplits && visibleSplits.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-[var(--background)] rounded-xl border border-[var(--line)] text-xs">
+          <span className="font-semibold text-[var(--foreground)] flex items-center gap-1.5">
+            <span>✂</span>
+            <span>{T.splitEventsSummary}：</span>
+          </span>
+          {visibleSplits.map((sp) => {
+            const isNear = activeSplit?.symbol === sp.symbol && activeSplit?.date === sp.date;
+            const key = `${sp.symbol}-${sp.date}`;
+            const { code } = symbolLabel(sp.symbol, lang);
+            return (
+              <span
+                key={key}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-all cursor-pointer select-none text-xs"
+                style={{
+                  borderColor: isNear ? sp.color : "var(--line)",
+                  background: isNear ? "var(--surface)" : "transparent",
+                  color: isNear ? sp.color : "inherit",
+                  boxShadow: isNear ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                  fontWeight: isNear ? 700 : 500,
+                }}
+                onMouseEnter={() => setHoveredSplitKey(key)}
+                onMouseLeave={() => setHoveredSplitKey((cur) => (cur === key ? null : cur))}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ background: sp.color }} />
+                <span className="font-semibold">{code}</span>
+                <span>{sp.date}</span>
+                <span className="opacity-75">[{sp.ratio}]</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       {/* 底部互動說明與提示 */}
       <div className="flex flex-col gap-1 text-[11px] text-[var(--foreground-muted)] px-1">

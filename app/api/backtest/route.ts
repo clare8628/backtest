@@ -176,9 +176,10 @@ export async function POST(req: NextRequest) {
       );
       // Splits within the aligned backtest window specifically — s.splits
       // itself still spans the full requested rangeYears fetch, untrimmed.
-      const splitCount = s.splits
-        ? s.splits.filter((sp) => (!window || (sp.date >= window.start && sp.date <= window.end))).length
+      const windowSplits = s.splits
+        ? s.splits.filter((sp) => (!window || (sp.date >= window.start && sp.date <= window.end)))
         : undefined;
+      const splitCount = windowSplits ? windowSplits.length : undefined;
       return {
         ...m,
         benchmarkSymbol,
@@ -188,6 +189,7 @@ export async function POST(req: NextRequest) {
         positiveYearPct: trend.positiveYearPct === null ? null : round2(trend.positiveYearPct),
         gainPainRatio: trend.gainPainRatio === null ? null : round2(trend.gainPainRatio),
         splitCount,
+        splits: windowSplits,
         assetClass: getAssetClass(s.symbol),
         creditRating: getCreditRating(s.symbol),
         fundSize: fundSize.value,
@@ -206,14 +208,18 @@ export async function POST(req: NextRequest) {
     // point so the toggle costs no data round-trip.
     const chartSeries: ChartSeries[] = alignedResults.map((s) => {
       const currency = nativeCurrencyOf(s.symbol);
-      const sampled = downsamplePrices(s.prices, 120);
+      const windowSplits = s.splits
+        ? s.splits.filter((sp) => (!window || (sp.date >= window.start && sp.date <= window.end)))
+        : undefined;
+      const splitDates = windowSplits ? windowSplits.map((sp) => sp.date) : [];
+      const sampled = downsamplePrices(s.prices, 120, splitDates);
       const points = sampled.map((p) => {
         const rate = rateAt ? rateAt(p.date) : null; // TWD per 1 USD
         const priceUSD = currency === "USD" ? p.close : rate !== null ? round2(p.close / rate) : null;
         const priceTWD = currency === "TWD" ? p.close : rate !== null ? round2(p.close * rate) : null;
         return { date: p.date, priceUSD, priceTWD };
       });
-      return { symbol: s.symbol, currency, points };
+      return { symbol: s.symbol, currency, points, splits: windowSplits };
     });
 
     return NextResponse.json({
