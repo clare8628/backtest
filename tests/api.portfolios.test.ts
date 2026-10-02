@@ -1,17 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ComparisonGroup } from "@/lib/types";
 
-// Mock environment
-const mockDB = {
-  prepare: (query: string) => ({
-    bind: (...params: any[]) => ({
-      first: async () => ({ id: "test" }),
-      all: async () => ({ results: [], success: true }),
-      run: async () => ({ success: true }),
-    }),
-  }),
-};
-
 describe("Portfolio API", () => {
   it("should create portfolio object correctly", () => {
     const portfolio: ComparisonGroup = {

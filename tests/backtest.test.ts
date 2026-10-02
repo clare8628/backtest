@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, downsamplePrices, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev, incomeProfile, simulateWithdrawnSeries } from "@/lib/backtest";
 import { parseStooqCsv, toStooqSymbol, toYahooSymbol, splitsUnreported, isTaiwanListed, symbolCandidates, lookupSymbol } from "@/lib/marketData";
 import { displaySymbol, findEntry, fundSizeIn, getAssetClass, getCreditRating, getFundSize, getManagementFee, nativeCurrencyOf, registerDynamicSymbol, searchCatalog } from "@/lib/symbolCatalog";
-import { PricePoint, BacktestMetrics } from "@/lib/types";
+import { PricePoint, BacktestMetrics, SymbolSeries } from "@/lib/types";
 
 function series(closes: number[]): PricePoint[] {
   return closes.map((close, i) => ({ date: `2024-01-${String(i + 1).padStart(2, "0")}`, close }));
@@ -812,7 +812,43 @@ describe("ETF Split Events Tracking [BAC-1]", () => {
     expect(windowSplits.length).toBe(2);
     expect(windowSplits.map((s) => s.date)).toEqual(["2022-01-13", "2025-11-20"]);
   });
+
+  it("populates splitCount and splits in computeMetrics", () => {
+    const sampleSeries: SymbolSeries = {
+      symbol: "TQQQ",
+      prices: [
+        { date: "2021-01-01", close: 50 },
+        { date: "2023-01-01", close: 100 },
+      ],
+      splits: [
+        { date: "2022-01-13", ratio: "2:1" },
+        { date: "2025-11-20", ratio: "2:1" },
+      ],
+    };
+
+    const metrics = computeMetrics(sampleSeries);
+    expect(metrics.splitCount).toBe(2);
+    expect(metrics.splits).toHaveLength(2);
+    expect(metrics.splits?.[0].ratio).toBe("2:1");
+    expect(metrics.splits?.[1].ratio).toBe("2:1");
+  });
+
+  it("handles series with undefined splits in computeMetrics", () => {
+    const sampleSeries: SymbolSeries = {
+      symbol: "0050.TW",
+      prices: [
+        { date: "2021-01-01", close: 100 },
+        { date: "2023-01-01", close: 130 },
+      ],
+      splits: undefined,
+    };
+
+    const metrics = computeMetrics(sampleSeries);
+    expect(metrics.splitCount).toBeUndefined();
+    expect(metrics.splits).toBeUndefined();
+  });
 });
+
 
 
 

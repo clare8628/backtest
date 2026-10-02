@@ -5,7 +5,7 @@ interface D1Database {
 }
 
 interface D1PreparedStatement {
-  bind(...params: any[]): D1PreparedStatement;
+  bind(...params: unknown[]): D1PreparedStatement;
   first<T = Record<string, unknown>>(): Promise<T | undefined>;
   all<T = Record<string, unknown>>(): Promise<{ results: T[]; success: boolean }>;
   run(): Promise<{ success: boolean }>;
@@ -25,13 +25,13 @@ export async function onRequestGet(context: { env: Env }) {
     }
 
     const result = await db.prepare("SELECT * FROM portfolios ORDER BY createdAt DESC").all();
-    const groups: ComparisonGroup[] = (result.results || []).map((row: any) => ({
-      id: row.id,
-      title: row.title,
-      symbols: JSON.parse(row.symbols || "[]"),
-      rangeYears: row.rangeYears || 5,
-      createdAt: row.createdAt,
-      startValue: row.startValue || 1000,
+    const groups: ComparisonGroup[] = (result.results || []).map((row: Record<string, unknown>) => ({
+      id: String(row.id ?? ""),
+      title: String(row.title ?? ""),
+      symbols: JSON.parse((row.symbols as string) || "[]"),
+      rangeYears: Number(row.rangeYears) || 5,
+      createdAt: String(row.createdAt ?? ""),
+      startValue: Number(row.startValue) || 1000,
     }));
 
     return new Response(JSON.stringify({ groups }), {

@@ -262,6 +262,8 @@ export function computeMetrics(
     calmarRatio: calmarRatio === null ? null : round2(calmarRatio),
     upCapture: capture.up === null ? null : round2(capture.up),
     downCapture: capture.down === null ? null : round2(capture.down),
+    splitCount: series.splits ? series.splits.length : undefined,
+    splits: series.splits,
   };
 }
 

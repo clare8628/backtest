@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 async function getDB() {
   try {
     const { env } = await getCloudflareContext({ async: true });
-    const db = (env as any).DB;
+    const db = (env as unknown as CloudflareEnv | undefined)?.DB;
     if (!db) {
       console.error("D1 binding 'DB' not found in Cloudflare env");
     }
@@ -27,7 +27,7 @@ async function getDB() {
  * request. A genuine failure clears the cache so the next request retries.
  */
 let schemaReady: Promise<void> | null = null;
-function ensureSchema(db: any): Promise<void> {
+function ensureSchema(db: D1Database): Promise<void> {
   if (!schemaReady) {
     schemaReady = Promise.resolve(
       db.prepare("ALTER TABLE portfolios ADD COLUMN rangeFitted INTEGER DEFAULT 0").run()
@@ -67,18 +67,18 @@ export async function GET() {
     await ensureSchema(db).catch((e) => console.error("ensureSchema (GET):", e));
 
     const result = await db.prepare("SELECT * FROM portfolios ORDER BY createdAt DESC").all();
-    const groups: ComparisonGroup[] = (result.results || []).map((row: any) => ({
-      id: row.id,
-      title: row.title,
-      symbols: JSON.parse(row.symbols || "[]"),
-      rangeYears: row.rangeYears || 5,
-      createdAt: row.createdAt,
-      startValue: row.startValue || 1000,
+    const groups: ComparisonGroup[] = (result.results || []).map((row: Record<string, unknown>) => ({
+      id: String(row.id ?? ""),
+      title: String(row.title ?? ""),
+      symbols: JSON.parse((row.symbols as string) || "[]"),
+      rangeYears: Number(row.rangeYears) || 5,
+      createdAt: String(row.createdAt ?? ""),
+      startValue: Number(row.startValue) || 1000,
       // Rows that predate this column read back as 0, so on first load every
       // existing group gets auto-fitted to its shortest symbol's history — the
       // behaviour asked for. After that the client sets this (auto-fit ran, or
       // the slider was moved) and the group is left alone.
-      rangeFitted: !!row.rangeFitted,
+      rangeFitted: Boolean(row.rangeFitted),
     }));
 
     return Response.json({ groups, persisted: true });
