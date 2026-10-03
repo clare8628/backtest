@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, downsamplePrices, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev, incomeProfile, simulateWithdrawnSeries } from "@/lib/backtest";
-import { parseStooqCsv, toStooqSymbol, toYahooSymbol, splitsUnreported, isTaiwanListed, symbolCandidates, lookupSymbol } from "@/lib/marketData";
+import { parseStooqCsv, toStooqSymbol, toYahooSymbol, splitsUnreported, getKnownSplits, KNOWN_SPLITS, isTaiwanListed, symbolCandidates, lookupSymbol } from "@/lib/marketData";
 import { displaySymbol, findEntry, fundSizeIn, getAssetClass, getCreditRating, getFundSize, getManagementFee, nativeCurrencyOf, registerDynamicSymbol, searchCatalog } from "@/lib/symbolCatalog";
 import { PricePoint, BacktestMetrics, SymbolSeries } from "@/lib/types";
 
@@ -507,19 +507,31 @@ describe("trendStrength", () => {
   });
 });
 
-describe("splitsUnreported", () => {
-  // Yahoo omits the split-events block both for a symbol that never split and
-  // for one it doesn't track, so the market has to decide which it means.
-  it("treats a missing block as a real zero for US-listed symbols", () => {
+describe("splitsUnreported and getKnownSplits", () => {
+  it("treats a missing block as a real zero for US-listed symbols that never split", () => {
     expect(splitsUnreported("SPY")).toEqual([]);
     expect(splitsUnreported("GLD")).toEqual([]);
   });
 
-  it("treats a missing block as unknown for Taiwan-listed symbols", () => {
-    // 0050.TW's June 2025 1-into-4 split is absent from Yahoo's events even
-    // though its prices are adjusted for it, so a "0" here would be a lie.
-    expect(splitsUnreported("0050.TW")).toBeUndefined();
-    expect(splitsUnreported("006208.tw")).toBeUndefined();
+  it("supplements known Taiwan ETF splits (e.g. 0050.TW, 00631L.TW, 00632R.TW)", () => {
+    expect(splitsUnreported("0050.TW")).toEqual([{ date: "2025-06-18", ratio: "4:1" }]);
+    expect(splitsUnreported("0050")).toEqual([{ date: "2025-06-18", ratio: "4:1" }]);
+    expect(getKnownSplits("0050.TW")).toEqual([{ date: "2025-06-18", ratio: "4:1" }]);
+    expect(KNOWN_SPLITS["0050.TW"]).toEqual([{ date: "2025-06-18", ratio: "4:1" }]);
+    expect(splitsUnreported("00631L.TW")).toEqual([{ date: "2026-03-31", ratio: "22:1" }]);
+    expect(splitsUnreported("00663L.TW")).toEqual([{ date: "2025-06-11", ratio: "7:1" }]);
+    expect(splitsUnreported("0052.TW")).toEqual([{ date: "2025-11-26", ratio: "7:1" }]);
+    expect(splitsUnreported("00685L.TW")).toEqual([{ date: "2026-07-07", ratio: "24:1" }]);
+    expect(splitsUnreported("00632R.TW")).toEqual([{ date: "2024-12-11", ratio: "1:7" }]);
+    expect(splitsUnreported("00676R.TW")).toEqual([{ date: "2025-02-19", ratio: "1:6" }]);
+  });
+
+  it("treats a missing block as a real zero for Taiwan ETFs that never split", () => {
+    expect(splitsUnreported("0056.TW")).toEqual([]);
+    expect(splitsUnreported("006208.tw")).toEqual([]);
+    expect(splitsUnreported("00679B.TWO")).toEqual([]);
+    expect(splitsUnreported("00878.TW")).toEqual([]);
+    expect(splitsUnreported("00713.TW")).toEqual([]);
   });
 });
 
@@ -537,10 +549,6 @@ describe("isTaiwanListed", () => {
   it("does not claim US symbols are Taiwan-listed", () => {
     expect(isTaiwanListed("TLT")).toBe(false);
     expect(isTaiwanListed("SPY")).toBe(false);
-  });
-
-  it("treats a TPEx symbol's missing split block as unknown too", () => {
-    expect(splitsUnreported("00679B.TWO")).toBeUndefined();
   });
 });
 
@@ -896,6 +904,33 @@ describe("ETF Split Events Tracking [BAC-1]", () => {
     expect(sampledDates.has(splitDates[0])).toBe(true);
     expect(sampledDates.has(splitDates[1])).toBe(true);
     expect(sampled.length).toBeLessThanOrEqual(130);
+  });
+
+  it("accurately handles 0050.TW split count and 0056.TW zero splits", () => {
+    const s0050: SymbolSeries = {
+      symbol: "0050.TW",
+      prices: [
+        { date: "2024-01-02", close: 35 },
+        { date: "2025-06-18", close: 47 },
+        { date: "2026-09-30", close: 50 },
+      ],
+      splits: splitsUnreported("0050.TW"),
+    };
+    const m0050 = computeMetrics(s0050);
+    expect(m0050.splitCount).toBe(1);
+    expect(m0050.splits).toEqual([{ date: "2025-06-18", ratio: "4:1" }]);
+
+    const s0056: SymbolSeries = {
+      symbol: "0056.TW",
+      prices: [
+        { date: "2024-01-02", close: 35 },
+        { date: "2026-09-30", close: 40 },
+      ],
+      splits: splitsUnreported("0056.TW"),
+    };
+    const m0056 = computeMetrics(s0056);
+    expect(m0056.splitCount).toBe(0);
+    expect(m0056.splits).toEqual([]);
   });
 });
 

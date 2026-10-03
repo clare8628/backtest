@@ -148,6 +148,26 @@ async function fetchFromYahoo(
     if (symbol.toUpperCase().startsWith("00631L") && date < "2015-01-01" && close > 5) {
       close = close / 22;
     }
+    // Yahoo Finance bug workaround: 0052.TW underwent a 1:7 split in Nov 2025.
+    // Yahoo left prices before 2025-11-17 unadjusted (~250 instead of ~35).
+    if (symbol.toUpperCase().startsWith("0052") && date < "2025-11-17" && close > 50) {
+      close = close / 7;
+    }
+    // Yahoo Finance bug workaround: 00676R.TW underwent a 1:6 reverse split in Feb 2025.
+    // Yahoo left prices before 2025-02-19 unadjusted (~2 instead of ~12).
+    if (symbol.toUpperCase().startsWith("00676R") && date < "2025-02-19" && close < 5) {
+      close = close * 6;
+    }
+    // Yahoo Finance bug workaround: 00673R.TW underwent a 1:4 reverse split in Oct 2025.
+    // Yahoo left prices before 2025-10-20 unadjusted (~7 instead of ~28).
+    if (symbol.toUpperCase().startsWith("00673R") && date < "2025-10-20" && close < 15) {
+      close = close * 4;
+    }
+    // Yahoo Finance bug workaround: 00674R.TW underwent a 1:5 reverse split in April 2026.
+    // Yahoo left prices before 2026-04-20 unadjusted (~5.2 instead of ~26).
+    if (symbol.toUpperCase().startsWith("00674R") && date < "2026-04-20" && close < 10) {
+      close = close * 5;
+    }
     // Yahoo Finance FX bug workaround: TWD=X has an erroneous close of 3.67 on 2014-12-31
     // (normal range ~25-35 TWD/USD), which causes a massive false spike in USD price conversions.
     if (symbol.toUpperCase().includes("TWD=X") && (close < 15 || close > 50)) {
@@ -173,19 +193,34 @@ async function fetchFromYahoo(
   // Historical prices from this endpoint are already split-adjusted (no
   // artificial jump around a split date), so a low share price never means a
   // low return — but that also makes splits invisible in the price series
-  // itself. Surface them explicitly from the requested split events instead.
+  // itself. Surface them explicitly from the requested split events, supplemented
+  // with curated corporate actions for markets where Yahoo's events feed is incomplete
+  // (e.g. Taiwan ETF splits & reverse splits).
   const rawSplits = result?.events?.splits as
     | Record<string, { date: number; numerator?: number; denominator?: number; splitRatio?: string }>
     | undefined;
-  const splits: SplitEvent[] | undefined = rawSplits
-    ? Object.values(rawSplits)
-        .map((s) => ({
-          date: new Date(s.date * 1000).toISOString().slice(0, 10),
-          ratio: s.splitRatio ?? `${s.numerator ?? "?"}:${s.denominator ?? "?"}`,
-        }))
-        .filter((s) => usedCutoff === null || new Date(s.date) >= usedCutoff)
-        .sort((a, b) => (a.date < b.date ? -1 : 1))
-    : splitsUnreported(symbol);
+  const yahooSplits: SplitEvent[] = rawSplits
+    ? Object.values(rawSplits).map((s) => ({
+        date: new Date(s.date * 1000).toISOString().slice(0, 10),
+        ratio: s.splitRatio ?? `${s.numerator ?? "?"}:${s.denominator ?? "?"}`,
+      }))
+    : [];
+
+  const known = getKnownSplits(symbol);
+
+  // Merge Yahoo splits with curated known splits, deduplicating by date
+  const splitMap = new Map<string, SplitEvent>();
+  for (const s of yahooSplits) {
+    splitMap.set(s.date, s);
+  }
+  for (const s of known) {
+    splitMap.set(s.date, s);
+  }
+
+  const allSplits = Array.from(splitMap.values());
+  const splits: SplitEvent[] = allSplits
+    .filter((s) => usedCutoff === null || new Date(s.date) >= usedCutoff)
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
 
   // Cash distributions, for the income metrics. Unlike splits these need no
   // market-specific caveat: the source reports them for US and Taiwan funds
@@ -222,11 +257,56 @@ export function isTaiwanListed(symbol: string): boolean {
 }
 
 /**
- * What an *absent* split-events block means for this symbol: a genuine zero,
- * or simply unknown.
+ * Known corporate action splits and reverse splits, particularly for Taiwan ETFs
+ * where Yahoo Finance does not carry split events in its chart API feed.
+ *
+ * For each symbol, splits are listed with effective date (YYYY-MM-DD, ex-date / resumption date)
+ * and ratio (e.g. "4:1" for a 1-into-4 forward split, "1:7" for a 7-into-1 reverse split).
  */
-export function splitsUnreported(symbol: string): SplitEvent[] | undefined {
-  return isTaiwanListed(symbol) ? undefined : [];
+export const KNOWN_SPLITS: Record<string, SplitEvent[]> = {
+  // 元大台灣50 (0050.TW): 1 拆 4, 恢復交易日 2025-06-18
+  "0050.TW": [{ date: "2025-06-18", ratio: "4:1" }],
+  // 元大台灣50正2 (00631L.TW): 1 拆 22, 恢復交易日 2026-03-31
+  "00631L.TW": [{ date: "2026-03-31", ratio: "22:1" }],
+  // 國泰臺灣加權正2 (00663L.TW): 1 拆 7, 恢復交易日 2025-06-11
+  "00663L.TW": [{ date: "2025-06-11", ratio: "7:1" }],
+  // 富邦科技 (0052.TW): 1 拆 7, 恢復交易日 2025-11-26
+  "0052.TW": [{ date: "2025-11-26", ratio: "7:1" }],
+  // 群益臺灣加權正2 (00685L.TW): 1 拆 24, 恢復交易日 2026-07-07
+  "00685L.TW": [{ date: "2026-07-07", ratio: "24:1" }],
+  // 元大台灣50反1 (00632R.TW): 7 併 1 反分割, 恢復交易日 2024-12-11
+  "00632R.TW": [{ date: "2024-12-11", ratio: "1:7" }],
+  // 富邦臺灣加權反1 (00676R.TW): 6 併 1 反分割, 恢復交易日 2025-02-19
+  "00676R.TW": [{ date: "2025-02-19", ratio: "1:6" }],
+  // 期元大S&P原油反1 (00673R.TW): 4 併 1 反分割, 恢復交易日 2025-10-22
+  "00673R.TW": [{ date: "2025-10-22", ratio: "1:4" }],
+  // 期街口布蘭特正2 (00715L.TW): 2 併 1 反分割, 恢復交易日 2025-12-10
+  "00715L.TW": [{ date: "2025-12-10", ratio: "1:2" }],
+  // 期元大S&P黃金反1 (00674R.TW): 5 併 1 反分割, 恢復交易日 2026-04-22
+  "00674R.TW": [{ date: "2026-04-22", ratio: "1:5" }],
+};
+
+export function getKnownSplits(symbol: string): SplitEvent[] {
+  const s = symbol.trim().toUpperCase();
+  const bare = s.replace(/\.(TW|TWO)$/i, "");
+  return (
+    KNOWN_SPLITS[s] ||
+    KNOWN_SPLITS[`${bare}.TW`] ||
+    KNOWN_SPLITS[`${bare}.TWO`] ||
+    KNOWN_SPLITS[bare] ||
+    []
+  );
+}
+
+/**
+ * What an *absent* split-events block means for this symbol:
+ * - If the symbol has curated entries in KNOWN_SPLITS (such as 0050.TW or 00631L.TW),
+ *   returns those verified splits.
+ * - Otherwise returns an empty array [] (genuine 0 splits), as coverage for US symbols
+ *   and Taiwan stocks is reliable, and Taiwan ETFs that never split have genuinely 0 splits.
+ */
+export function splitsUnreported(symbol: string): SplitEvent[] {
+  return getKnownSplits(symbol);
 }
 
 function yearsToYahooRange(years: number): string {
