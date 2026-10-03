@@ -14,10 +14,11 @@
     "db:migrate": "wrangler d1 execute backtest-portfolios --remote --file ./migrations/0001_create_portfolios.sql",
     "db:migrate:0003": "wrangler d1 execute backtest-portfolios --remote --file ./migrations/0003_add_range_fitted.sql",
     "db:migrate:local": "wrangler d1 execute backtest-portfolios --local --file ./migrations/0001_create_portfolios.sql",
-    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "postinstall": "node scripts/fix-next-locale-matcher.js"
   },
   "dependencies": {
-    "next": "16.3.0",
+    "next": "^16.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
