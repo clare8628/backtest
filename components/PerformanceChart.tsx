@@ -385,7 +385,7 @@ export default function PerformanceChart({
     if (hoverX === null || !showSplits || visibleSplits.length === 0) return null;
     let closest: { split: VisibleSplit; dist: number } | null = null;
     for (const sp of visibleSplits) {
-      const spX = xFor(sp.t);
+      const spX = sp.point ? xFor(sp.point.t) : xFor(sp.t);
       const dist = Math.abs(hoverX - spX);
       if (dist <= PROXIMITY_THRESHOLD) {
         if (!closest || dist < closest.dist) {
@@ -868,7 +868,7 @@ export default function PerformanceChart({
           {/* 股票分割垂直引導軸線 (Stock Split Vertical Guidelines) */}
           {showSplits &&
             visibleSplits.map((sp) => {
-              const spX = xFor(sp.t);
+              const spX = sp.point ? xFor(sp.point.t) : xFor(sp.t);
               const isNear = activeSplit?.symbol === sp.symbol && activeSplit?.date === sp.date;
               const isSeriesHovered = hoveredSymbol === sp.symbol;
               const isDimmed = hoveredSymbol !== null && !isSeriesHovered;
@@ -1011,7 +1011,7 @@ export default function PerformanceChart({
           {/* 股票分割點標註與時間標籤 (Stock Split Nodes & Date Badges) */}
           {showSplits &&
             visibleSplits.map((sp, idx) => {
-              const spX = xFor(sp.t);
+              const spX = sp.point ? xFor(sp.point.t) : xFor(sp.t);
               const spY = sp.point ? yFor(sp.point.value) : padding.top + innerH / 2;
               const isNear = activeSplit?.symbol === sp.symbol && activeSplit?.date === sp.date;
               const isSeriesHovered = hoveredSymbol === sp.symbol;

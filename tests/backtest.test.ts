@@ -862,6 +862,41 @@ describe("ETF Split Events Tracking [BAC-1]", () => {
     expect(metrics.splitCount).toBe(0);
     expect(metrics.splits).toEqual([]);
   });
+
+  it("handles ETF with exactly 2 splits: preserves both split dates in chart sampling and reflects in metrics", () => {
+    // 假設某隻 ETF (如 TQQQ) 經歷 2 次分割
+    const splitDates = ["2022-01-13", "2023-05-15"];
+    const splits = [
+      { date: splitDates[0], ratio: "2:1" },
+      { date: splitDates[1], ratio: "2:1" },
+    ];
+
+    // 建立 600 天的交易歷史
+    const prices: PricePoint[] = Array.from({ length: 600 }, (_, i) => {
+      const d = new Date(Date.UTC(2022, 0, 1) + i * 86_400_000).toISOString().slice(0, 10);
+      return { date: d, close: 50 + i * 0.1 };
+    });
+
+    const seriesData: SymbolSeries = {
+      symbol: "TQQQ",
+      prices,
+      splits,
+    };
+
+    // 1. 指標中正確統計 2 次分割
+    const metrics = computeMetrics(seriesData);
+    expect(metrics.splitCount).toBe(2);
+    expect(metrics.splits).toHaveLength(2);
+    expect(metrics.splits?.[0].date).toBe("2022-01-13");
+    expect(metrics.splits?.[1].date).toBe("2023-05-15");
+
+    // 2. 趨勢圖取樣確保 2 個分割時間點皆完整保留
+    const sampled = downsamplePrices(prices, 120, splitDates);
+    const sampledDates = new Set(sampled.map((p) => p.date));
+    expect(sampledDates.has(splitDates[0])).toBe(true);
+    expect(sampledDates.has(splitDates[1])).toBe(true);
+    expect(sampled.length).toBeLessThanOrEqual(130);
+  });
 });
 
 

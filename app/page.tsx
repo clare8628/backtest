@@ -233,7 +233,7 @@ function metricSections(
           label: T.splitCount,
           value: (m) => {
             if (m.splitCount === undefined || m.splitCount === null) return DASH;
-            const countStr = lang === "zh" ? `${m.splitCount} 次` : String(m.splitCount);
+            const countStr = T.splitUnit ? `${m.splitCount} ${T.splitUnit}` : String(m.splitCount);
             if (m.splits && m.splits.length > 0) {
               const tooltip = m.splits.map((s) => `${s.date} (${s.ratio})`).join(", ");
               return (
