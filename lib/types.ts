@@ -13,6 +13,17 @@ export interface SplitEvent {
   ratio: string; // e.g. "2:1" for a 2-for-1 forward split
 }
 
+export interface D1PreparedStatement {
+  bind(...params: unknown[]): D1PreparedStatement;
+  first<T = Record<string, unknown>>(): Promise<T | undefined>;
+  all<T = Record<string, unknown>>(): Promise<{ results: T[]; success: boolean }>;
+  run(): Promise<{ success: boolean }>;
+}
+
+export interface D1Database {
+  prepare(query: string): D1PreparedStatement;
+}
+
 export interface SymbolSeries {
   symbol: string;
   name?: string;

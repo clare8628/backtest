@@ -1,12 +1,13 @@
-import { ComparisonGroup } from "@/lib/types";
+import { ComparisonGroup, D1Database } from "@/lib/types";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 export const dynamic = "force-dynamic";
 
-async function getDB() {
+async function getDB(): Promise<D1Database | undefined> {
   try {
     const { env } = await getCloudflareContext({ async: true });
-    const db = (env as unknown as CloudflareEnv | undefined)?.DB;
+    const cfEnv = env as { DB?: D1Database } | undefined;
+    const db = cfEnv?.DB;
     if (!db) {
       console.error("D1 binding 'DB' not found in Cloudflare env");
     }
