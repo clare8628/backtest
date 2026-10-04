@@ -138,10 +138,18 @@ async function fetchFromYahoo(
   }
 
   const prices: PricePoint[] = [];
+  const cleanSym = symbol.toUpperCase().replace(/\.(TW|TWO)$/i, "");
   for (let i = 0; i < timestamps.length; i++) {
     let close = closes[i];
     if (close === null || close === undefined) continue;
     const date = new Date(timestamps[i] * 1000).toISOString().slice(0, 10);
+    // Yahoo Finance bug workaround: 0050.TW underwent a 1:4 split in June 2025.
+    // Yahoo adjusted prices from 2014-01-02 onwards (~14.5), but left prices before 2014-01-02
+    // unadjusted (~30~58 instead of ~7.5~14.5), causing a false 75% cliff drop and severely
+    // depressing long-term returns (e.g. 270% instead of ~1380%).
+    if (cleanSym === "0050" && date < "2014-01-02" && close > 18) {
+      close = close / 4;
+    }
     // Yahoo Finance bug workaround: 00631L.TW underwent a 1:22 split in March 2026.
     // Yahoo adjusted prices from 2015-01-05 onwards (~0.85), but left 2014-10-23 to 2014-12-31
     // unadjusted (~19~20), causing a 22x artificial spike and distorted 12-year backtest metrics.

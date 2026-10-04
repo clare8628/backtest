@@ -932,6 +932,50 @@ describe("ETF Split Events Tracking [BAC-1]", () => {
     expect(m0056.splitCount).toBe(0);
     expect(m0056.splits).toEqual([]);
   });
+
+  it("correctly handles 0050.TW pre-2014 4:1 split adjustment and outperforms 0056 over long horizon", () => {
+    // 模擬 0050.TW 與 0056.TW 在 2008 年底到 2026 年的歷史價格
+    // 0050 未修正前 2008 年底約 30.5，修正後應除以 4 得到 7.625；2013 年底 58.7 修正後為 14.675
+    // 2014 年初平滑銜接 14.6375，至 2026 年達到 112.8
+    const s0050: SymbolSeries = {
+      symbol: "0050.TW",
+      prices: [
+        { date: "2008-12-31", close: 7.625 },
+        { date: "2013-12-31", close: 14.675 },
+        { date: "2014-01-02", close: 14.6375 },
+        { date: "2026-10-02", close: 112.8 },
+      ],
+      splits: splitsUnreported("0050.TW"),
+    };
+
+    const s0056: SymbolSeries = {
+      symbol: "0056.TW",
+      prices: [
+        { date: "2008-12-31", close: 13.13 },
+        { date: "2013-12-31", close: 23.5 },
+        { date: "2014-01-02", close: 23.16 },
+        { date: "2026-10-02", close: 57.05 },
+      ],
+      splits: splitsUnreported("0056.TW"),
+    };
+
+    const m0050 = computeMetrics(s0050, 100);
+    const m0056 = computeMetrics(s0056, 100);
+
+    // 0050 累積報酬率應約 1379%，遠高於 0056 的約 334%
+    expect(m0050.totalReturn).toBeGreaterThan(1300);
+    expect(m0056.totalReturn).toBeCloseTo(334.5, 0);
+    expect(m0050.totalReturn).toBeGreaterThan(m0056.totalReturn);
+
+    // 0050 年化報酬率應在 16% 左右，高於 0056 的 8.6% 左右
+    expect(m0050.annualizedReturn).toBeGreaterThan(15);
+    expect(m0050.annualizedReturn).toBeGreaterThan(m0056.annualizedReturn);
+
+    // 0050 跨年 2013-12-31 至 2014-01-02 不得出現超過 1% 的人為斷崖跳水
+    const p1 = s0050.prices[1].close;
+    const p2 = s0050.prices[2].close;
+    expect(Math.abs((p2 - p1) / p1)).toBeLessThan(0.01);
+  });
 });
 
 
