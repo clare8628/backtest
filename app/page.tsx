@@ -8,6 +8,7 @@ import { loadGroups, upsertGroup, deleteGroup, newGroupId } from "@/lib/storage"
 import PerformanceChart, { SimSettings } from "@/components/PerformanceChart";
 import Sparkline from "@/components/Sparkline";
 import { simulateWithdrawnSeries } from "@/lib/backtest";
+import { APP_VERSION, BUILD_TIME_ISO, DISPLAY_VERSION } from "@/lib/version";
 
 interface BacktestResult {
   metrics: BacktestMetrics[];
@@ -751,9 +752,9 @@ export default function Home() {
                 color: "var(--orchid-ink)",
                 border: "1px solid rgba(142, 79, 174, 0.2)",
               }}
-              title="Version 0.2.0"
+              title={`Version ${APP_VERSION}${BUILD_TIME_ISO ? ` · built ${BUILD_TIME_ISO}` : ""}`}
             >
-              v0.2.0
+              v{DISPLAY_VERSION}
             </span>
           </div>
           <button
