@@ -368,6 +368,7 @@ export default function Home() {
   const [results, setResults] = useState<Record<string, BacktestResult>>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
   const [simSettingsMap, setSimSettingsMap] = useState<Record<string, SimSettings>>({});
   /** Which tile is open. One at a time: an open tile spans the whole grid row,
    *  so two of them would leave no gallery to come back to. */
@@ -620,6 +621,13 @@ export default function Home() {
         else runBacktest(updated);
       }
     });
+  }
+
+  /** Saves an edited title; a blank one falls back to the symbol list, like an unnamed new group. */
+  function commitGroupTitle(group: ComparisonGroup, value: string) {
+    const title = value.trim() || group.symbols.map((s) => displaySymbol(s, lang)).join(" / ");
+    if (title === group.title) return;
+    updateGroup({ ...group, title });
   }
 
   async function addSymbolToGroup(group: ComparisonGroup, sym: string) {
@@ -944,7 +952,28 @@ export default function Home() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-display text-xl truncate">{g.title}</h3>
+                        {renamingId === g.id ? (
+                          <input
+                            autoFocus
+                            defaultValue={g.title}
+                            aria-label={T.groupTitleLabel}
+                            maxLength={80}
+                            className="font-display text-xl w-full min-w-0 bg-transparent border-b outline-none"
+                            style={{ borderColor: "var(--line)" }}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                              if (e.key === "Enter") e.currentTarget.blur();
+                              if (e.key === "Escape") setRenamingId(null);
+                            }}
+                            onBlur={(e) => {
+                              commitGroupTitle(g, e.currentTarget.value);
+                              setRenamingId(null);
+                            }}
+                          />
+                        ) : (
+                          <h3 className="font-display text-xl truncate">{g.title}</h3>
+                        )}
                         {isSelected && (
                           <span
                             className="px-2 py-0.5 text-[11px] font-medium rounded-full shrink-0"
@@ -1014,6 +1043,12 @@ export default function Home() {
                     {isLoading ? T.running : T.runBacktest}
                   </button>
                   <button
+                    onClick={() => setRenamingId(g.id)}
+                    className="btn-ghost px-3 py-1.5 text-sm"
+                  >
+                    {T.rename}
+                  </button>
+                  <button
                     onClick={() => handleDelete(g.id)}
                     className="btn-ghost px-3 py-1.5 text-sm"
                   >
@@ -1061,7 +1096,19 @@ export default function Home() {
                 {/* Header info & action bar */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b" style={{ borderColor: "var(--line)" }}>
                   <div className="min-w-0">
-                    <h3 className="font-display text-2xl sm:text-3xl">{g.title}</h3>
+                    <input
+                      key={`${g.id}:${g.title}`}
+                      defaultValue={g.title}
+                      aria-label={T.groupTitleLabel}
+                      placeholder={T.groupTitleLabel}
+                      maxLength={80}
+                      className="font-display text-2xl sm:text-3xl w-full bg-transparent border-b outline-none"
+                      style={{ borderColor: "var(--line)" }}
+                      onBlur={(e) => commitGroupTitle(g, e.currentTarget.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                      }}
+                    />
                     <p className="text-sm mt-1" style={{ color: "var(--foreground-muted)" }}>
                       {g.symbols.map((s) => displaySymbol(s, lang)).join(" · ") || "—"}
                     </p>

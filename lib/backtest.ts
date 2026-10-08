@@ -217,7 +217,18 @@ export function computeMetrics(
   // The simple average of each period's return, annualized — the raw upward
   // drift *before* compounding takes its cut. Always >= the compounded (CAGR)
   // figure, and the gap between them is the volatility drag below.
-  const arithmeticAnnualReturn = mean(rets) * ppy * 100;
+  //
+  // Compounded (not multiplied) by ppy: annualizedReturn is itself a compounded
+  // figure — (last/first)^(1/years) - 1 — so comparing it against a merely
+  // multiplied mean*ppy pits a compounding quantity against a linear one. By
+  // AM-GM, mean(rets) is always >= the per-period CAGR implied by the price
+  // series, so compounding that mean by the same ppy exponent as the CAGR
+  // comparison guarantees arithmeticAnnualReturn >= annualizedReturn (Bernoulli's
+  // inequality) — multiplying instead does not: it understates the drift's own
+  // compounding and can land *below* annualizedReturn for perfectly ordinary
+  // growing series (e.g. a steady SPY-like 20-year run), flipping volatilityDrag
+  // negative when it is defined and displayed as a non-negative cost.
+  const arithmeticAnnualReturn = (Math.pow(1 + mean(rets), ppy) - 1) * 100;
   // What a bumpy path costs per year: a series that gains and loses the same
   // percentage ends below where it started, and the deeper the swings the
   // bigger the shortfall (roughly variance/2). This is the number that

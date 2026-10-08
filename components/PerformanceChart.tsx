@@ -1404,7 +1404,13 @@ export default function PerformanceChart({
         )}
 
         {mode === "price" && (
-          <p className="opacity-75">{T.splitAdjustedNote}</p>
+          <p className="opacity-75">
+            {visibleSplits.length > 0
+              ? `${visibleSplits
+                  .map((sp) => `${symbolLabel(sp.symbol, lang).code} ${sp.date} (${sp.ratio})`)
+                  .join(lang === "zh" ? "、" : ", ")} — ${T.splitAdjustedNoteDetail}`
+              : T.splitAdjustedNote}
+          </p>
         )}
       </div>
     </div>

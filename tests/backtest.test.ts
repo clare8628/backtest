@@ -366,6 +366,35 @@ describe("computeMetrics annualization", () => {
       computeMetrics({ symbol: "B", prices: bumpy }).volatilityDrag!
     );
   });
+
+  // Regression: arithmeticAnnualReturn used to annualize the daily mean by
+  // *multiplying* it by ppy, but annualizedReturn (CAGR) is itself a *compounded*
+  // figure. Comparing a linear quantity against a compounded one isn't
+  // apples-to-apples, and for perfectly ordinary growing series (steady daily
+  // gains over many years, same shape as a real long-running equity ETF) the
+  // compounded CAGR overtakes the linearly-scaled mean, driving volatilityDrag
+  // negative — the opposite of its documented meaning (a non-negative cost,
+  // always rendered in the UI as "-X%"). A single bad trading day can't recreate
+  // this; it only shows up with realistic daily bars over a long enough span, so
+  // the shorter monthly-series tests above never exercised it.
+  it("keeps volatilityDrag non-negative for a steady multi-year daily-growth series", () => {
+    // 252 trading days/year over 10 years — spaced at the real trading-day rate
+    // (365.25/252 calendar days apart), not one point per calendar day. One
+    // point per calendar day would pack ~365 bars into each year, overshooting
+    // periodsPerYear's 252 clamp the same way a real Yahoo trading calendar
+    // never does, which would reintroduce a *different* mismatch than the one
+    // this test targets.
+    const n = 252 * 10;
+    const start = Date.parse("2015-01-01T00:00:00Z");
+    const dayMs = (365.25 / 252) * 86_400_000;
+    const prices: PricePoint[] = Array.from({ length: n }, (_, i) => ({
+      date: new Date(start + i * dayMs).toISOString().slice(0, 10),
+      close: 100 * 1.0003 ** i,
+    }));
+    const m = computeMetrics({ symbol: "SPY-LIKE", prices });
+    expect(m.volatilityDrag!).toBeGreaterThanOrEqual(0);
+    expect(m.arithmeticAnnualReturn!).toBeGreaterThanOrEqual(m.annualizedReturn);
+  });
 });
 
 describe("captureRatios", () => {
