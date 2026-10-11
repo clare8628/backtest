@@ -194,6 +194,7 @@ export async function POST(req: NextRequest) {
         creditRating: getCreditRating(s.symbol),
         fundSize: fundSize.value,
         fundSizeCurrency: fundSize.currency,
+        fundSizeUnavailableReason: fundSize.unavailableReason,
         estimatedYieldPct:
           income.estimatedYieldPct === null ? null : round2(income.estimatedYieldPct),
         distributionsPerYear: income.distributionsPerYear,

@@ -18,7 +18,25 @@ export interface CatalogEntry {
    *  FUND_SIZE_AS_OF. See that constant for why this is a dated snapshot
    *  rather than a live figure. */
   fundSizeSnapshot?: number;
+  /**
+   * Why fundSizeSnapshot is missing for a fund that would otherwise have one
+   * (an ETF/fund, not an individual stock). Lets the UI print the actual
+   * reason — "delisting", "no data" — next to the dash instead of a bare
+   * blank that reads as this app simply never having looked.
+   *
+   * Left undefined for individual stocks (no fund-size concept applies, so
+   * a plain dash is already correct) and for any fund whose blank is just
+   * not-yet-backfilled rather than a known, permanent cause.
+   */
+  fundSizeUnavailableReason?: FundSizeUnavailableReason;
 }
+
+/** Known, explainable causes for a fund carrying no net-assets figure.
+ *  "delisting": removed from the exchange and being liquidated — the fund
+ *  itself still exists but the source no longer carries a net-assets figure.
+ *  "noData": the fund trades normally but the data source has no net-assets
+ *  figure for it (e.g. too new, or the source simply omits it). */
+export type FundSizeUnavailableReason = "delisting" | "noData";
 
 /**
  * When the fundSizeSnapshot figures were read from the exchange.
@@ -35,10 +53,19 @@ export interface CatalogEntry {
  * Covers every fund in the catalog, equity ETFs included — a fund-size column
  * that only fills in for bond ETFs answers the question for none of the
  * comparisons people actually run. Individual stocks carry no figure by
- * definition, and two funds (00687B, 00790B) are absent from the source's
- * net-assets data entirely; all of those show a dash rather than a guess.
+ * definition, and 00790B is absent from the source's net-assets data
+ * entirely (it was delisted for falling below the NT$100m minimum and is
+ * being liquidated); it shows a dash rather than a guess.
+ *
+ * Re-fetched on 2026-10-11 to backfill every fund the catalog had grown to
+ * include since the original 2026-08-31 pass (new US/TW dividend, gold and
+ * short-duration Treasury ETFs) — see commit history for the set that was
+ * new this round. Pre-existing figures were left as last measured rather
+ * than re-verified one by one; fund size moves slowly enough that the few
+ * weeks' difference does not change the scale comparison this column exists
+ * for.
  */
-export const FUND_SIZE_AS_OF = "2026-08-31";
+export const FUND_SIZE_AS_OF = "2026-10-11";
 
 /** Curated list of popular global ETFs and stocks for quick search/add.
  *  expenseRatio values reflect each fund's actual published annual expense ratio. */
@@ -47,8 +74,8 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "VT", name: "Vanguard 全世界股票 ETF", nameEn: "Vanguard Total World Stock ETF", category: "ETF", expenseRatio: 0.07, fundSizeSnapshot: 97884921856 },
   { symbol: "SPY", name: "SPDR 標普500 ETF", nameEn: "SPDR S&P 500 ETF Trust", category: "ETF", expenseRatio: 0.0945, fundSizeSnapshot: 795306885120 },
   { symbol: "QQQ", name: "Invesco 那斯達克100 ETF", nameEn: "Invesco QQQ Trust", category: "ETF", expenseRatio: 0.20, fundSizeSnapshot: 452800643072 },
-  { symbol: "QQQI", name: "NEOS 那斯達克100高股息 ETF", nameEn: "NEOS Nasdaq 100 High Income ETF", category: "ETF", expenseRatio: 0.68 },
-  { symbol: "SPMO", name: "Invesco 標普500動能 ETF", nameEn: "Invesco S&P 500 Momentum ETF", category: "ETF", expenseRatio: 0.13 },
+  { symbol: "QQQI", name: "NEOS 那斯達克100高股息 ETF", nameEn: "NEOS Nasdaq 100 High Income ETF", category: "ETF", expenseRatio: 0.68, fundSizeSnapshot: 15390000000 },
+  { symbol: "SPMO", name: "Invesco 標普500動能 ETF", nameEn: "Invesco S&P 500 Momentum ETF", category: "ETF", expenseRatio: 0.13, fundSizeSnapshot: 23250000000 },
   { symbol: "TQQQ", name: "Invesco 那斯達克100 正3倍槓桿 ETF", nameEn: "Invesco QQQ Trust 3x Shares", category: "ETF", expenseRatio: 1.08, fundSizeSnapshot: 32831182848 },
   { symbol: "QLD", name: "ProShares 那斯達克100 正2倍槓桿 ETF", nameEn: "ProShares Ultra QQQ", category: "ETF", expenseRatio: 0.95, fundSizeSnapshot: 12760278016 },
   { symbol: "UPRO", name: "ProShares 標普500 正3倍槓桿 ETF", nameEn: "ProShares Ultra Pro S&P 500 ETF", category: "ETF", expenseRatio: 1.01, fundSizeSnapshot: 5150206464 },
@@ -68,26 +95,24 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   //    not a substitute for holding the metal.
   // expenseRatio is each fund's published net figure; the Taiwan futures ETFs
   // are left blank (no verified figure — Yahoo reports 0.00% for them, which is
-  // not real). fundSizeSnapshot is omitted for everything added here: the
-  // snapshot fetch (see FUND_SIZE_AS_OF) has not been re-run to cover them, so
-  // they show a dash rather than a stale or guessed number.
+  // not real).
   { symbol: "GLD", name: "SPDR 黃金 ETF", nameEn: "SPDR Gold Shares", category: "Gold ETF", expenseRatio: 0.40, fundSizeSnapshot: 130322653184 },
-  { symbol: "IAU", name: "iShares 黃金信託 ETF", nameEn: "iShares Gold Trust", category: "Gold ETF", expenseRatio: 0.25 },
-  { symbol: "GLDM", name: "SPDR 黃金 MiniShares ETF", nameEn: "SPDR Gold MiniShares Trust", category: "Gold ETF", expenseRatio: 0.10 },
-  { symbol: "SGOL", name: "abrdn 實體黃金 ETF", nameEn: "abrdn Physical Gold Shares ETF", category: "Gold ETF", expenseRatio: 0.17 },
-  { symbol: "IAUM", name: "iShares 黃金信託 Micro ETF", nameEn: "iShares Gold Trust Micro", category: "Gold ETF", expenseRatio: 0.09 },
-  { symbol: "BAR", name: "GraniteShares 黃金信託 ETF", nameEn: "GraniteShares Gold Trust", category: "Gold ETF", expenseRatio: 0.17 },
-  { symbol: "AAAU", name: "Goldman Sachs 實體黃金 ETF", nameEn: "Goldman Sachs Physical Gold ETF", category: "Gold ETF", expenseRatio: 0.18 },
-  { symbol: "OUNZ", name: "VanEck Merk 黃金 ETF", nameEn: "VanEck Merk Gold ETF", category: "Gold ETF", expenseRatio: 0.25 },
+  { symbol: "IAU", name: "iShares 黃金信託 ETF", nameEn: "iShares Gold Trust", category: "Gold ETF", expenseRatio: 0.25, fundSizeSnapshot: 61510000000 },
+  { symbol: "GLDM", name: "SPDR 黃金 MiniShares ETF", nameEn: "SPDR Gold MiniShares Trust", category: "Gold ETF", expenseRatio: 0.10, fundSizeSnapshot: 30440000000 },
+  { symbol: "SGOL", name: "abrdn 實體黃金 ETF", nameEn: "abrdn Physical Gold Shares ETF", category: "Gold ETF", expenseRatio: 0.17, fundSizeSnapshot: 7080000000 },
+  { symbol: "IAUM", name: "iShares 黃金信託 Micro ETF", nameEn: "iShares Gold Trust Micro", category: "Gold ETF", expenseRatio: 0.09, fundSizeSnapshot: 7880000000 },
+  { symbol: "BAR", name: "GraniteShares 黃金信託 ETF", nameEn: "GraniteShares Gold Trust", category: "Gold ETF", expenseRatio: 0.17, fundSizeSnapshot: 1320000000 },
+  { symbol: "AAAU", name: "Goldman Sachs 實體黃金 ETF", nameEn: "Goldman Sachs Physical Gold ETF", category: "Gold ETF", expenseRatio: 0.18, fundSizeSnapshot: 2630000000 },
+  { symbol: "OUNZ", name: "VanEck Merk 黃金 ETF", nameEn: "VanEck Merk Gold ETF", category: "Gold ETF", expenseRatio: 0.25, fundSizeSnapshot: 2670000000 },
   // Gold-futures ETFs on the TWSE (期信 ETF). 00708L resets its 2x exposure
   // daily, so it tracks 2x gold only day-to-day, not over long holds.
-  { symbol: "00635U.TW", name: "元大S&P黃金 ETF", nameEn: "Yuanta S&P Gold ETF", category: "Gold ETF" },
-  { symbol: "00708L.TW", name: "元大S&P黃金正2 ETF（2倍槓桿）", nameEn: "Yuanta S&P Gold Leveraged 2X ETF", category: "Gold ETF" },
+  { symbol: "00635U.TW", name: "元大S&P黃金 ETF", nameEn: "Yuanta S&P Gold ETF", category: "Gold ETF", fundSizeSnapshot: 13565000000 },
+  { symbol: "00708L.TW", name: "元大S&P黃金正2 ETF（2倍槓桿）", nameEn: "Yuanta S&P Gold Leveraged 2X ETF", category: "Gold ETF", fundSizeSnapshot: 11523000000 },
   // Gold-miner equity ETFs.
-  { symbol: "GDX", name: "VanEck 黃金礦業 ETF", nameEn: "VanEck Gold Miners ETF", category: "Gold Miner ETF", expenseRatio: 0.51 },
-  { symbol: "GDXJ", name: "VanEck 小型黃金礦業 ETF", nameEn: "VanEck Junior Gold Miners ETF", category: "Gold Miner ETF", expenseRatio: 0.52 },
-  { symbol: "RING", name: "iShares MSCI 全球黃金礦業 ETF", nameEn: "iShares MSCI Global Gold Miners ETF", category: "Gold Miner ETF", expenseRatio: 0.39 },
-  { symbol: "SGDM", name: "Sprott 黃金礦業 ETF", nameEn: "Sprott Gold Miners ETF", category: "Gold Miner ETF", expenseRatio: 0.50 },
+  { symbol: "GDX", name: "VanEck 黃金礦業 ETF", nameEn: "VanEck Gold Miners ETF", category: "Gold Miner ETF", expenseRatio: 0.51, fundSizeSnapshot: 26120000000 },
+  { symbol: "GDXJ", name: "VanEck 小型黃金礦業 ETF", nameEn: "VanEck Junior Gold Miners ETF", category: "Gold Miner ETF", expenseRatio: 0.52, fundSizeSnapshot: 8210000000 },
+  { symbol: "RING", name: "iShares MSCI 全球黃金礦業 ETF", nameEn: "iShares MSCI Global Gold Miners ETF", category: "Gold Miner ETF", expenseRatio: 0.39, fundSizeSnapshot: 2250000000 },
+  { symbol: "SGDM", name: "Sprott 黃金礦業 ETF", nameEn: "Sprott Gold Miners ETF", category: "Gold Miner ETF", expenseRatio: 0.50, fundSizeSnapshot: 637640000 },
   // Taiwan-listed ETFs (Yahoo Finance requires the .TW suffix for TWSE tickers).
   // Several issuers (notably 0050 and 006208) moved to asset-size-tiered management
   // fees in 2025, so these totals are current best-effort snapshots rather than
@@ -97,26 +122,26 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "0056.TW", name: "元大高股息 ETF", nameEn: "Yuanta Taiwan Dividend Plus ETF", category: "ETF", expenseRatio: 0.66, fundSizeSnapshot: 703518998528 },
   { symbol: "00878.TW", name: "國泰永續高股息 ETF", nameEn: "Cathay Taiwan ESG High Dividend ETF", category: "ETF", expenseRatio: 0.59, fundSizeSnapshot: 594163007488 },
   { symbol: "00919.TW", name: "群益台灣精選高息 ETF", nameEn: "Capital Taiwan Top Dividend Select ETF", category: "ETF", expenseRatio: 0.55, fundSizeSnapshot: 538296778752 },
-  { symbol: "00713.TW", name: "元大台灣高息低波 ETF", nameEn: "Yuanta Taiwan High Dividend Low Volatility ETF", category: "ETF" },
+  { symbol: "00713.TW", name: "元大台灣高息低波 ETF", nameEn: "Yuanta Taiwan High Dividend Low Volatility ETF", category: "ETF", fundSizeSnapshot: 108637000000 },
   { symbol: "00929.TW", name: "復華台灣科技優息 ETF", nameEn: "FSITC Taiwan Technology Optimized Yield ETF", category: "ETF", expenseRatio: 0.60, fundSizeSnapshot: 131343351808 },
-  { symbol: "00915.TW", name: "凱基優選高股息30 ETF", nameEn: "KGI Taiwan Premium Selection High Dividend 30 ETF", category: "ETF" },
-  { symbol: "00918.TW", name: "大華優利高填息30 ETF", nameEn: "Dahan Taiwan High Dividend 30 ETF", category: "ETF" },
-  { symbol: "00939.TW", name: "統一台灣高息動能 ETF", nameEn: "UPAMC Taiwan High Dividend Momentum ETF", category: "ETF" },
-  { symbol: "00940.TW", name: "元大台灣價值高息 ETF", nameEn: "Yuanta Taiwan Value High Dividend ETF", category: "ETF" },
-  { symbol: "00934.TW", name: "中信成長高股息 ETF", nameEn: "CTBC TIP Customized Taiwan Growth and High Dividend ETF", category: "ETF" },
-  { symbol: "00936.TW", name: "台新臺灣AI優息動能 ETF", nameEn: "Taishin TIP Customized Taiwan ESG High Dividend Small/Mid-Cap ETF", category: "ETF" },
-  { symbol: "00944.TW", name: "野村趨勢動能高股息 ETF", nameEn: "Nomura Taiwan Momentum High Dividend ETF", category: "ETF" },
-  { symbol: "00946.TW", name: "群益科技高息成長 ETF", nameEn: "Capital TIP Customized Taiwan Tech High Dividend And Growth ETF", category: "ETF" },
-  { symbol: "00900.TW", name: "富邦特選高股息30 ETF", nameEn: "Fubon Taiwan High Dividend 30 ETF", category: "ETF" },
-  { symbol: "00701.TW", name: "國泰股利精選30 ETF", nameEn: "Cathay TIP TAIEX+ Low Volatility Select 30 ETF", category: "ETF" },
-  { symbol: "00730.TW", name: "富邦臺灣優質高息 ETF", nameEn: "Fubon Dow Jones Taiwan High-Quality Dividend 30 ETF", category: "ETF" },
-  { symbol: "00731.TW", name: "復華富時高息低波 ETF", nameEn: "Fuh Hwa FTSE Taiwan High Div Low Vol ETF", category: "ETF" },
-  { symbol: "00907.TW", name: "永豐優息存股 ETF", nameEn: "SinoPac Taiwan Superior Dividend Highlight Stocks ETF", category: "ETF" },
-  { symbol: "00930.TW", name: "永豐ESG低碳高息 ETF", nameEn: "SinoPac Taiwan ESG Low Carbon High Dividend ETF", category: "ETF" },
-  { symbol: "00932.TW", name: "兆豐永續高息等權 ETF", nameEn: "Mega Taiwan ESG High Dividend Equal Weight ETF", category: "ETF" },
-  { symbol: "00943.TW", name: "兆豐電子高息等權 ETF", nameEn: "Mega Taiwan IT Growth and High Dividend Equal Weight ETF", category: "ETF" },
-  { symbol: "00961.TW", name: "FT臺灣永續高息 ETF", nameEn: "Franklin Templeton SinoAm Taiwan ESG High Dividend ETF", category: "ETF" },
-  { symbol: "00927.TW", name: "群益半導體收益 ETF", nameEn: "Capital TIP Taiwan Semiconductor Dividend Yield ETF", category: "ETF" },
+  { symbol: "00915.TW", name: "凱基優選高股息30 ETF", nameEn: "KGI Taiwan Premium Selection High Dividend 30 ETF", category: "ETF", fundSizeSnapshot: 16467000000 },
+  { symbol: "00918.TW", name: "大華優利高填息30 ETF", nameEn: "Dahan Taiwan High Dividend 30 ETF", category: "ETF", fundSizeSnapshot: 161216000000 },
+  { symbol: "00939.TW", name: "統一台灣高息動能 ETF", nameEn: "UPAMC Taiwan High Dividend Momentum ETF", category: "ETF", fundSizeSnapshot: 27851000000 },
+  { symbol: "00940.TW", name: "元大台灣價值高息 ETF", nameEn: "Yuanta Taiwan Value High Dividend ETF", category: "ETF", fundSizeSnapshot: 66846000000 },
+  { symbol: "00934.TW", name: "中信成長高股息 ETF", nameEn: "CTBC TIP Customized Taiwan Growth and High Dividend ETF", category: "ETF", fundSizeSnapshot: 13792000000 },
+  { symbol: "00936.TW", name: "台新臺灣AI優息動能 ETF", nameEn: "Taishin TIP Customized Taiwan ESG High Dividend Small/Mid-Cap ETF", category: "ETF", fundSizeSnapshot: 4147000000 },
+  { symbol: "00944.TW", name: "野村趨勢動能高股息 ETF", nameEn: "Nomura Taiwan Momentum High Dividend ETF", category: "ETF", fundSizeSnapshot: 1172000000 },
+  { symbol: "00946.TW", name: "群益科技高息成長 ETF", nameEn: "Capital TIP Customized Taiwan Tech High Dividend And Growth ETF", category: "ETF", fundSizeSnapshot: 6626000000 },
+  { symbol: "00900.TW", name: "富邦特選高股息30 ETF", nameEn: "Fubon Taiwan High Dividend 30 ETF", category: "ETF", fundSizeSnapshot: 28935000000 },
+  { symbol: "00701.TW", name: "國泰股利精選30 ETF", nameEn: "Cathay TIP TAIEX+ Low Volatility Select 30 ETF", category: "ETF", fundSizeSnapshot: 6950000000 },
+  { symbol: "00730.TW", name: "富邦臺灣優質高息 ETF", nameEn: "Fubon Dow Jones Taiwan High-Quality Dividend 30 ETF", category: "ETF", fundSizeSnapshot: 2095000000 },
+  { symbol: "00731.TW", name: "復華富時高息低波 ETF", nameEn: "Fuh Hwa FTSE Taiwan High Div Low Vol ETF", category: "ETF", fundSizeSnapshot: 1977000000 },
+  { symbol: "00907.TW", name: "永豐優息存股 ETF", nameEn: "SinoPac Taiwan Superior Dividend Highlight Stocks ETF", category: "ETF", fundSizeSnapshot: 2661000000 },
+  { symbol: "00930.TW", name: "永豐ESG低碳高息 ETF", nameEn: "SinoPac Taiwan ESG Low Carbon High Dividend ETF", category: "ETF", fundSizeSnapshot: 3822000000 },
+  { symbol: "00932.TW", name: "兆豐永續高息等權 ETF", nameEn: "Mega Taiwan ESG High Dividend Equal Weight ETF", category: "ETF", fundSizeSnapshot: 1860000000 },
+  { symbol: "00943.TW", name: "兆豐電子高息等權 ETF", nameEn: "Mega Taiwan IT Growth and High Dividend Equal Weight ETF", category: "ETF", fundSizeSnapshot: 877000000 },
+  { symbol: "00961.TW", name: "FT臺灣永續高息 ETF", nameEn: "Franklin Templeton SinoAm Taiwan ESG High Dividend ETF", category: "ETF", fundSizeSnapshot: 14226000000 },
+  { symbol: "00927.TW", name: "群益半導體收益 ETF", nameEn: "Capital TIP Taiwan Semiconductor Dividend Yield ETF", category: "ETF", fundSizeSnapshot: 59920000000 },
   { symbol: "00631L.TW", name: "元大台灣50正2 ETF（2倍槓桿）", nameEn: "Yuanta Taiwan 50 Leveraged 2X ETF", category: "ETF", expenseRatio: 1.05, fundSizeSnapshot: 264845983744 },
   { symbol: "00632R.TW", name: "元大台灣50反1 ETF（反向1倍）", nameEn: "Yuanta Taiwan 50 Inverse 1X ETF", category: "ETF", expenseRatio: 1.00, fundSizeSnapshot: 22022539264 },
   // --- Bond ETFs, for evaluating retirement income rather than capital gains.
@@ -137,7 +162,7 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   // --- US-listed bond ETFs. assetClass/creditRating reflect each fund's stated
   // mandate; expense ratios are the published figures Yahoo reports for them.
   { symbol: "TLT", name: "iShares 20年期以上美國公債 ETF", nameEn: "iShares 20+ Year Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 41543831552 },
-  { symbol: "VGLT", name: "Vanguard 長期美國公債 ETF", nameEn: "Vanguard Long-Term Treasury ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
+  { symbol: "VGLT", name: "Vanguard 長期美國公債 ETF", nameEn: "Vanguard Long-Term Treasury ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 10580000000 },
   { symbol: "IEF", name: "iShares 7-10年期美國公債 ETF", nameEn: "iShares 7-10 Year Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 47187439616 },
   { symbol: "SHY", name: "iShares 1-3年期美國公債 ETF", nameEn: "iShares 1-3 Year Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 25080700928 },
   { symbol: "GOVT", name: "iShares 美國公債 ETF", nameEn: "iShares U.S. Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.05, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 43550478336 },
@@ -152,18 +177,16 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "MUB", name: "iShares 美國市政債 ETF", nameEn: "iShares National Muni Bond ETF", category: "Bond ETF", expenseRatio: 0.05, assetClass: "美國市政債", creditRating: "高評級（A- 以上）", fundSizeSnapshot: 45275856896 },
   // US-listed short-term / ultra-short Treasury ETFs — cash-like holdings that
   // track T-bill or 1-3yr yields with negligible duration risk. expenseRatio is
-  // each fund's published net figure (SGOV's is after a fee waiver). No
-  // fundSizeSnapshot: the FUND_SIZE_AS_OF fetch has not been re-run to cover
-  // them, so they show a dash rather than a stale or guessed number.
-  { symbol: "SGOV", name: "iShares 0-3個月美國公債 ETF", nameEn: "iShares 0-3 Month Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.09, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
-  { symbol: "BIL", name: "SPDR 彭博1-3個月美國國庫券 ETF", nameEn: "SPDR Bloomberg 1-3 Month T-Bill ETF", category: "Bond ETF", expenseRatio: 0.1356, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
-  { symbol: "SHV", name: "iShares 短期美國公債 ETF", nameEn: "iShares Short Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
-  { symbol: "GBIL", name: "Goldman Sachs Access 0-1年美國公債 ETF", nameEn: "Goldman Sachs Access Treasury 0-1 Year ETF", category: "Bond ETF", expenseRatio: 0.12, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
-  { symbol: "USFR", name: "WisdomTree 美國浮動利率公債 ETF", nameEn: "WisdomTree Floating Rate Treasury Fund", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國浮動利率公債", creditRating: "AA+（美國主權）" },
-  { symbol: "TFLO", name: "iShares 美國浮動利率公債 ETF", nameEn: "iShares Treasury Floating Rate Bond ETF", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國浮動利率公債", creditRating: "AA+（美國主權）" },
-  { symbol: "VGSH", name: "Vanguard 短期美國公債 ETF", nameEn: "Vanguard Short-Term Treasury ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
-  { symbol: "SCHO", name: "Schwab 短期美國公債 ETF", nameEn: "Schwab Short-Term U.S. Treasury ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
-  { symbol: "SPTS", name: "SPDR 投資組合短期美國公債 ETF", nameEn: "SPDR Portfolio Short Term Treasury ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "美國公債", creditRating: "AA+（美國主權）" },
+  // each fund's published net figure (SGOV's is after a fee waiver).
+  { symbol: "SGOV", name: "iShares 0-3個月美國公債 ETF", nameEn: "iShares 0-3 Month Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.09, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 114790000000 },
+  { symbol: "BIL", name: "SPDR 彭博1-3個月美國國庫券 ETF", nameEn: "SPDR Bloomberg 1-3 Month T-Bill ETF", category: "Bond ETF", expenseRatio: 0.1356, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 50970000000 },
+  { symbol: "SHV", name: "iShares 短期美國公債 ETF", nameEn: "iShares Short Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 23590000000 },
+  { symbol: "GBIL", name: "Goldman Sachs Access 0-1年美國公債 ETF", nameEn: "Goldman Sachs Access Treasury 0-1 Year ETF", category: "Bond ETF", expenseRatio: 0.12, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 7890000000 },
+  { symbol: "USFR", name: "WisdomTree 美國浮動利率公債 ETF", nameEn: "WisdomTree Floating Rate Treasury Fund", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國浮動利率公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 20880000000 },
+  { symbol: "TFLO", name: "iShares 美國浮動利率公債 ETF", nameEn: "iShares Treasury Floating Rate Bond ETF", category: "Bond ETF", expenseRatio: 0.15, assetClass: "美國浮動利率公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 7090000000 },
+  { symbol: "VGSH", name: "Vanguard 短期美國公債 ETF", nameEn: "Vanguard Short-Term Treasury ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 35470000000 },
+  { symbol: "SCHO", name: "Schwab 短期美國公債 ETF", nameEn: "Schwab Short-Term U.S. Treasury ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 15440000000 },
+  { symbol: "SPTS", name: "SPDR 投資組合短期美國公債 ETF", nameEn: "SPDR Portfolio Short Term Treasury ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 7140000000 },
 
   // --- Taiwan-listed (TPEx) investment-grade bond ETFs, ordered by fund size.
   { symbol: "00937B.TWO", name: "群益ESG投等債20+", nameEn: "CAPITAL ICE ESG 20+ Year BBB Us Corporate ETF", category: "Bond ETF", assetClass: "投資級公司債", creditRating: "BBB 級", fundSizeSnapshot: 245334228992 },
@@ -261,10 +284,11 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "00765B.TWO", name: "群益中國政金債", nameEn: "Capital ICE 0-10 Year China Policy Bank ETF", category: "Bond ETF", assetClass: "中國政策金融債", creditRating: "A+（中國主權級）", fundSizeSnapshot: 59221952 },
   { symbol: "00794B.TWO", name: "群益7+中國政金債", nameEn: "CAPITAL ICE 7+ YEAR CHINA POLICY BANK EXCHANGE TRADED FUND", category: "Bond ETF", assetClass: "中國政策金融債", creditRating: "A+（中國主權級）", fundSizeSnapshot: 46698624 },
   { symbol: "00831B.TWO", name: "新光美債1-3", nameEn: "Shin Kong US Treasury 1-3 Year Bond ETF", category: "Bond ETF", assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 4105768 },
-  // The source reports no net assets for these two, so they show a dash where
-  // every other fund shows a figure.
-  { symbol: "00687B.TWO", name: "國泰20年美債", nameEn: "Cathay US Treasury 20+ YR ETF TWD", category: "Bond ETF", assetClass: "美國公債", creditRating: "AA+（美國主權）" },
-  { symbol: "00790B.TWO", name: "復華次順位金融債", nameEn: "Fuh Hwa 8+ Year Financial Subordinate Bond ETF", category: "Bond ETF", assetClass: "金融債" },
+  { symbol: "00687B.TWO", name: "國泰20年美債", nameEn: "Cathay US Treasury 20+ YR ETF TWD", category: "Bond ETF", assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 109384000000 },
+  // 00790B was delisted and is being liquidated after its net assets stayed
+  // below the exchange's NT$100m minimum for 30 straight sessions — it shows
+  // a dash rather than a figure for a fund that is no longer really a fund.
+  { symbol: "00790B.TWO", name: "復華次順位金融債", nameEn: "Fuh Hwa 8+ Year Financial Subordinate Bond ETF", category: "Bond ETF", assetClass: "金融債", fundSizeUnavailableReason: "delisting" },
   { symbol: "BND", name: "Vanguard 總體債券 ETF", nameEn: "Vanguard Total Bond Market ETF", category: "Bond ETF", expenseRatio: 0.03, assetClass: "綜合債券", creditRating: "投資等級（BBB- 以上）", fundSizeSnapshot: 396675153920 },
   { symbol: "AAPL", name: "蘋果公司", nameEn: "Apple Inc.", category: "Stock", expenseRatio: 0 },
   { symbol: "MSFT", name: "微軟", nameEn: "Microsoft Corp.", category: "Stock", expenseRatio: 0 },
@@ -343,6 +367,13 @@ export function getFundSize(symbol: string): number | null {
   return findEntry(symbol)?.fundSizeSnapshot ?? null;
 }
 
+/** The curated, explainable reason a fund has no net-assets figure — see
+ *  FundSizeUnavailableReason. Undefined for individual stocks and for any
+ *  blank that isn't yet attributed to a known cause. */
+export function getFundSizeUnavailableReason(symbol: string): FundSizeUnavailableReason | undefined {
+  return findEntry(symbol)?.fundSizeUnavailableReason;
+}
+
 /**
  * Taiwan's exchanges suffix a ticker with .TW (TWSE) or .TWO (TPEx).
  *
@@ -413,18 +444,24 @@ export function displaySymbol(symbol: string, lang: "zh" | "en" = "zh"): string 
  * returned in its native currency rather than converted at a guessed rate: a
  * correctly-labelled TWD number is honest, an invented USD one is not.
  *
+ * `unavailableReason` carries forward the catalog's explanation (see
+ * FundSizeUnavailableReason) when `value` is null for a known cause — the UI
+ * shows that reason next to the dash instead of leaving it unexplained.
+ *
  * @param usdTwdRate TWD per 1 USD, or null when unknown.
  */
 export function fundSizeIn(
   symbol: string,
   target: Currency,
   usdTwdRate: number | null
-): { value: number | null; currency: Currency } {
+): { value: number | null; currency: Currency; unavailableReason?: FundSizeUnavailableReason } {
   const value = getFundSize(symbol);
   const native = nativeCurrencyOf(symbol);
   // Nothing to convert: with no snapshot the UI shows a dash, so report the
   // currency the column is in rather than one this fund never contributed to.
-  if (value === null) return { value: null, currency: target };
+  if (value === null) {
+    return { value: null, currency: target, unavailableReason: getFundSizeUnavailableReason(symbol) };
+  }
   if (native === target) return { value, currency: native };
   if (usdTwdRate === null || !(usdTwdRate > 0)) return { value, currency: native };
   const converted = target === "USD" ? value / usdTwdRate : value * usdTwdRate;

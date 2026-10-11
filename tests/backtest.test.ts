@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, downsamplePrices, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev, incomeProfile, simulateWithdrawnSeries } from "@/lib/backtest";
 import { parseStooqCsv, toStooqSymbol, toYahooSymbol, splitsUnreported, getKnownSplits, KNOWN_SPLITS, isTaiwanListed, symbolCandidates, lookupSymbol } from "@/lib/marketData";
-import { displaySymbol, findEntry, fundSizeIn, getAssetClass, getCreditRating, getFundSize, getManagementFee, nativeCurrencyOf, registerDynamicSymbol, searchCatalog } from "@/lib/symbolCatalog";
+import { displaySymbol, findEntry, fundSizeIn, getAssetClass, getCreditRating, getFundSize, getFundSizeUnavailableReason, getManagementFee, nativeCurrencyOf, registerDynamicSymbol, searchCatalog } from "@/lib/symbolCatalog";
 import { PricePoint, BacktestMetrics, SymbolSeries } from "@/lib/types";
 
 function series(closes: number[]): PricePoint[] {
@@ -683,11 +683,32 @@ describe("fundSizeIn", () => {
   });
 
   it("reports no size, rather than a converted zero, for a symbol with no snapshot", () => {
-    expect(fundSizeIn("AAPL", "USD", RATE)).toEqual({ value: null, currency: "USD" });
-    // 00687B is absent from the source's net-assets data, and mislabelling
-    // its dash "TWD" in a USD column would suggest the column mixes
-    // currencies.
-    expect(fundSizeIn("00687B.TWO", "USD", RATE)).toEqual({ value: null, currency: "USD" });
+    // AAPL is a stock, not a fund — no fundSizeUnavailableReason applies, so
+    // the UI shows a bare dash rather than an explanation that doesn't exist.
+    expect(fundSizeIn("AAPL", "USD", RATE)).toEqual({ value: null, currency: "USD", unavailableReason: undefined });
+    // 00790B is delisted (net assets fell below the exchange minimum) and
+    // absent from the source's net-assets data; mislabelling its dash "TWD"
+    // in a USD column would suggest the column mixes currencies. The reason
+    // flows through so the UI can print it next to the dash.
+    expect(fundSizeIn("00790B.TWO", "USD", RATE)).toEqual({
+      value: null,
+      currency: "USD",
+      unavailableReason: "delisting",
+    });
+  });
+});
+
+describe("getFundSizeUnavailableReason", () => {
+  it("surfaces the catalog's explanation for a known blank", () => {
+    expect(getFundSizeUnavailableReason("00790B.TWO")).toBe("delisting");
+  });
+
+  it("is undefined for a stock, which has no fund-size concept to explain", () => {
+    expect(getFundSizeUnavailableReason("AAPL")).toBeUndefined();
+  });
+
+  it("is undefined for a fund whose snapshot is simply present", () => {
+    expect(getFundSizeUnavailableReason("TLT")).toBeUndefined();
   });
 });
 

@@ -89,6 +89,19 @@ function formatFundSize(value: number | null | undefined, currency: Currency | u
   return `$${value.toLocaleString()}`;
 }
 
+/** A dash alone doesn't say whether "no fund size" means "not a fund" (a
+ *  stock — expected, no explanation needed) or "this fund has no figure for
+ *  a specific, known reason" (delisted, no data from the source) — so when
+ *  the catalog knows the reason, it renders right next to the dash. */
+function fundSizeReasonLabel(
+  reason: "delisting" | "noData" | undefined,
+  T: Dict
+): string | null {
+  if (reason === "delisting") return T.fundSizeReasonDelisting;
+  if (reason === "noData") return T.fundSizeReasonNoData;
+  return null;
+}
+
 /** Turn a raw count of payments per year into the label an investor thinks in.
  *  Kept slightly loose because a fund's first or last year in the window can
  *  land 11 or 13 payments on a genuinely monthly schedule. */
@@ -213,7 +226,20 @@ function metricSections(
       rows: [
         { label: T.assetClass, value: (m) => text(m.assetClass) },
         { label: T.creditRating, value: (m) => text(m.creditRating) },
-        { label: T.fundSize, value: (m) => formatFundSize(m.fundSize, m.fundSizeCurrency) },
+        {
+          label: T.fundSize,
+          value: (m) => {
+            const formatted = formatFundSize(m.fundSize, m.fundSizeCurrency);
+            const reason = fundSizeReasonLabel(m.fundSizeUnavailableReason, T);
+            if (!reason) return formatted;
+            return (
+              <span className="inline-flex flex-col items-end leading-tight">
+                <span>{formatted}</span>
+                <span className="text-[10px] opacity-70 font-normal">({reason})</span>
+              </span>
+            );
+          },
+        },
         {
           label: T.estimatedYield,
           value: (m) => pct(m.estimatedYieldPct),

@@ -105,6 +105,11 @@ export interface BacktestMetrics {
   creditRating?: string;
   fundSize?: number | null;
   fundSizeCurrency?: Currency;
+  /** Set only when fundSize is null for a known, explainable cause (e.g. the
+   *  fund was delisted and is being liquidated) — see
+   *  symbolCatalog.FundSizeUnavailableReason. The UI shows this reason next
+   *  to the dash instead of leaving a blank that reads as unexamined. */
+  fundSizeUnavailableReason?: "delisting" | "noData";
   estimatedYieldPct?: number | null;
   distributionsPerYear?: number | null;
   /** False when managementFee is the 0% fallback rather than a published
