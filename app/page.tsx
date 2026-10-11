@@ -65,8 +65,8 @@ function SymbolLabel({ symbol, lang }: { symbol: string; lang: Lang }) {
   if (!name) return <>{code}</>;
   return (
     <span className="inline-flex flex-col items-center leading-tight">
-      <span>{code}</span>
-      <span className="text-xs font-normal opacity-70">{name}</span>
+      <span className="text-xs font-semibold">{code}</span>
+      <span className="text-[11px] font-normal opacity-70 whitespace-nowrap">{name}</span>
     </span>
   );
 }
@@ -185,12 +185,14 @@ function metricSections(
             m.beta === null ? (
               "N/A"
             ) : (
-              <>
-                {m.beta}
+              <span className="inline-flex items-baseline justify-end gap-1 flex-wrap">
+                <span>{m.beta}</span>
                 {m.benchmarkSymbol && (
-                  <span className="opacity-50"> ({T.betaVs} {displaySymbol(m.benchmarkSymbol, lang)})</span>
+                  <span className="text-[11px] opacity-60 font-normal">
+                    ({T.betaVs} {displaySymbol(m.benchmarkSymbol, lang)})
+                  </span>
                 )}
-              </>
+              </span>
             ),
         },
       ],
@@ -198,7 +200,6 @@ function metricSections(
     {
       title: T.groupSource,
       rows: [
-        { label: T.arithmeticAnnualReturn, value: (m) => pct(m.arithmeticAnnualReturn) },
         {
           label: T.volatilityDrag,
           value: (m) => (m.volatilityDrag === undefined ? DASH : `-${m.volatilityDrag}%`),
@@ -224,8 +225,6 @@ function metricSections(
     {
       title: T.groupIncome,
       rows: [
-        { label: T.assetClass, value: (m) => text(m.assetClass) },
-        { label: T.creditRating, value: (m) => text(m.creditRating) },
         {
           label: T.fundSize,
           value: (m) => {
@@ -251,29 +250,9 @@ function metricSections(
     {
       title: T.groupInfo,
       rows: [
-        { label: T.maxBacktestYears, value: (m) => num(m.maxBacktestYears) },
         {
           label: T.fee,
           value: (m) => (m.managementFeeKnown === false ? DASH : pct(m.managementFee)),
-        },
-        {
-          label: T.splitCount,
-          value: (m) => {
-            if (m.splitCount === undefined || m.splitCount === null) return DASH;
-            const countStr = T.splitUnit ? `${m.splitCount} ${T.splitUnit}` : String(m.splitCount);
-            if (m.splits && m.splits.length > 0) {
-              const tooltip = m.splits.map((s) => `${s.date} (${s.ratio})`).join(", ");
-              return (
-                <span title={`${T.splitDate}: ${tooltip}`} className="cursor-help inline-flex flex-col items-end leading-tight">
-                  <span className="font-semibold">{countStr}</span>
-                  <span className="text-[10px] opacity-70 font-normal">
-                    {m.splits.map((s) => `${s.date.slice(0, 7)} [${s.ratio}]`).join(", ")}
-                  </span>
-                </span>
-              );
-            }
-            return countStr;
-          },
         },
       ],
     },
@@ -334,9 +313,9 @@ function MetricsTable({
     <table className="w-full border-collapse metrics-table">
       <thead>
         <tr style={{ color: "var(--foreground-muted)" }}>
-          <th className="py-1 pr-4 text-left font-normal">{T.metric}</th>
+          <th className="py-1.5 pr-4 text-left font-normal text-xs whitespace-nowrap">{T.metric}</th>
           {sortedMetrics.map((m) => (
-            <th key={m.symbol} className="py-1 px-2 text-right font-medium" style={{ color: "var(--foreground)" }}>
+            <th key={m.symbol} className="py-1.5 px-2 text-right font-medium" style={{ color: "var(--foreground)" }}>
               <SymbolLabel symbol={m.symbol} lang={lang} />
             </th>
           ))}
@@ -348,7 +327,7 @@ function MetricsTable({
             <tr>
               <td
                 colSpan={sortedMetrics.length + 1}
-                className="table-group pt-4 pb-1"
+                className="table-group pt-3 pb-1"
               >
                 {section.title}
               </td>
@@ -357,7 +336,7 @@ function MetricsTable({
               <tr key={row.label} className="metrics-row border-t cursor-default" style={{ borderColor: "var(--line)" }}>
                 <th
                   scope="row"
-                  className="py-2 pl-2 pr-4 text-left text-xs font-normal rounded-l"
+                  className="py-1.5 pl-2 pr-4 text-left text-xs font-normal rounded-l whitespace-nowrap"
                   style={{ color: "var(--foreground-muted)" }}
                 >
                   {row.label}
@@ -365,7 +344,7 @@ function MetricsTable({
                 {sortedMetrics.map((m, idx) => (
                   <td
                     key={m.symbol}
-                    className={`py-2 px-2 text-right tabular-nums${idx === sortedMetrics.length - 1 ? " pr-2 rounded-r" : ""}`}
+                    className={`py-1.5 px-2 text-right tabular-nums${idx === sortedMetrics.length - 1 ? " pr-2 rounded-r" : ""}`}
                     style={{ color: row.color?.(m) }}
                   >
                     {row.value(m)}

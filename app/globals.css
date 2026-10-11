@@ -174,26 +174,26 @@ h3,
  * the numbered section labels. */
 .table-group {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--foreground);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
 }
 
-/* Metrics table (資產矩陣) typography scaled 1.331x (1.1x * 1.1x * 1.1x) */
+/* Metrics table (資產矩陣) typography - 適度調整指標文字大小為小 (13px / 11px) */
 .metrics-table {
-  font-size: calc(0.875rem * 1.331); /* 14px * 1.331 = 18.634px */
-  line-height: calc(1.25rem * 1.331);
+  font-size: 0.8125rem; /* 13px */
+  line-height: 1.25rem;
 }
 
 .metrics-table .text-xs {
-  font-size: calc(0.75rem * 1.331); /* 12px * 1.331 = 15.972px */
-  line-height: calc(1rem * 1.331);
+  font-size: 0.6875rem; /* 11px */
+  line-height: 0.95rem;
 }
 
 .metrics-table .table-group {
-  font-size: calc(12px * 1.331); /* 12px * 1.331 = 15.972px */
+  font-size: 11px;
 }
 
 /* Row hover highlight to easily trace across columns on wide screens */

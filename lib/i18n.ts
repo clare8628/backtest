@@ -102,7 +102,7 @@ export const dict = {
     splitAdjustedNote: "股價已依分割回溯調整",
     splitAdjustedNoteDetail: "分割前股價已依比例回溯換算，走勢並未真的下跌，是為了讓報酬率計算維持連續。",
     metric: "指標",
-    groupInfo: "標的資訊",
+    groupInfo: "持有費用",
     groupReturn: "報酬",
     groupRisk: "風險",
     groupSource: "報酬來源分解",
@@ -114,10 +114,10 @@ export const dict = {
     downCapture: "下跌捕獲率(%)",
     sourceNote: "為什麼趨勢品質較差卻能贏在累積報酬",
     sourceNoteText:
-      "趨勢指標衡量的是「路徑品質」，累積報酬則取決於「每期報酬的幅度 × 複利」，兩者可以背道而馳。本區把年化報酬拆開來看，恆等式為：年化報酬 = 算術平均年報酬 − 波動耗損。算術平均年報酬是尚未複利前的原始漲勢；波動耗損則是顛簸路徑每年吃掉的部分（漲跌同幅度會低於原點，約等於變異數的一半）。3 倍槓桿 ETF 的耗損可能是原型的十幾倍，但它的原始漲勢也是 3 倍，因此仍可能大勝。上漲/下跌捕獲率顯示這個機制：相對基準指數，它在漲跌兩邊各吃下約 3 倍，而基準本身漲多於跌。報酬回撤比（年化報酬 ÷ 最大回撤）則回答「這些多出來的報酬是打折買到的，還是照原價付清的」。",
+      "趨勢指標衡量的是「路徑品質」，累積報酬則取決於「每期報酬的幅度 × 複利」，兩者可以背道而馳。波動耗損是顛簸路徑每年吃掉的複利部分（漲跌同幅度會低於原點，約等於變異數的一半；年化報酬 ≈ 算術平均年報酬 − 波動耗損）。3 倍槓桿 ETF 的耗損可能是原型的十幾倍，但它的原始漲勢也是 3 倍，因此仍可能大勝。上漲/下跌捕獲率顯示這個機制：相對基準指數，它在漲跌兩邊各吃下約 3 倍，而基準本身漲多於跌。報酬回撤比（年化報酬 ÷ 最大回撤）則回答「這些多出來的報酬是打折買到的，還是照原價付清的」。",
     resolutionNote:
       "註：資料來源在較長區間會自動改為月線，因此波動度、夏普、波動耗損在不同回測年數間不完全可比（趨勢方向各項已統一以月收盤價計算，不受影響）。",
-    groupIncome: "債券／收益評估",
+    groupIncome: "規模與收益評估",
     assetClass: "標的類別",
     creditRating: "信用評級",
     fundSize: "基金規模",
@@ -131,9 +131,9 @@ export const dict = {
     freqAnnual: "年配",
     freqOther: "不定期",
     perYear: "次/年",
-    incomeNote: "債券／收益指標的資料來源",
+    incomeNote: "規模與收益指標的資料來源",
     incomeNoteText:
-      "估計年化殖利率＝過去 12 個月「實際配發」的每股配息總額 ÷ 最新收盤價，是回顧性的已實現殖利率，不是預測；債券配息會隨利率與持債更動，去年的數字只是參考而非保證。配息頻率為同一區間內的實際配息次數（12 次＝月配、4 次＝季配）。基金規模以該標的自身的交易幣別計價（美股為美元、台股為新台幣）；同一組中若同時含有美股與台股標的，則一律換算為美元（以快照日 2026-08-31 的美元／新台幣匯率換算），否則 1,674 億 TWD 與 $41.5B 並列會讓人誤判量級大小；匯率取不到時，該欄位維持原幣別顯示，不以推測匯率換算。基金規模為 2026-08-31 自交易所實際抓取的淨資產快照；此欄原本設計為即時查詢，但提供淨資產的端點會對本站主機所在的 IP 回覆 429（請求過於頻繁），線上環境永遠讀不到值，因此改以標註日期的快照呈現，需要更新時可重新抓取。基金規模用於判斷「量級」（是 2,453 億還是 5 億的基金），變動緩慢，標註日期即可看出新舊。標的類別與信用評級為人工整理，取自各基金官方名稱所載的信用級別（台灣的基金命名規則要求載明「投資級／A級／BBB／非投等」等字樣）；名稱未載明級別者一律留空顯示「—」，不做推測，實際平均信用評級請以各投信公開說明書與月報為準。個股與未收錄標的的相關欄位皆顯示「—」。",
+      "估計年化殖利率＝過去 12 個月「實際配發」的每股配息總額 ÷ 最新收盤價，是回顧性的已實現殖利率，不是預測；配息會隨市場與持股/債更動，去年的數字只是參考而非保證。配息頻率為同一區間內的實際配息次數（12 次＝月配、4 次＝季配）。基金規模以該標的自身的交易幣別計價（美股為美元、台股為新台幣）；同一組中若同時含有美股與台股標的，則一律換算為美元（以快照日 2026-08-31 的美元／新台幣匯率換算），否則 1,674 億 TWD 與 $41.5B 並列會讓人誤判量級大小；匯率取不到時，該欄位維持原幣別顯示，不以推測匯率換算。基金規模為 2026-08-31 自交易所實際抓取的淨資產快照；此欄原本設計為即時查詢，但提供淨資產的端點會對本站主機所在的 IP 回覆 429（請求過於頻繁），線上環境永遠讀不到值，因此改以標註日期的快照呈現，需要更新時可重新抓取。基金規模用於判斷「量級」（是 2,453 億還是 5 億的基金），變動緩慢，標註日期即可看出新舊。個股與未收錄標的的相關欄位皆顯示「—」。",
     twoSuffixNote:
       "註：台灣的債券 ETF 均在櫃買中心（TPEx）掛牌，代號後綴為 .TWO 而非 .TW；本平台已一併校正其計價幣別（新台幣）與對標基準（0050）。台股代號一律省略交易所後綴，並把基金名稱換行置中顯示於代號正下方（表格欄位、圖例、標的標籤、排名）；行文中無法換行處則以 00687B(國泰20年美債) 形式呈現 —— 這些代號彼此往往只差一碼，只看數字極易看錯。",
     trendNote: "長期向上趨勢指標",
@@ -244,7 +244,7 @@ export const dict = {
     splitAdjustedNoteDetail:
       "Pre-split prices are scaled down proportionally — the chart isn't showing an actual decline, it's keeping return calculations continuous across the split.",
     metric: "Metric",
-    groupInfo: "Symbol Info",
+    groupInfo: "Expense",
     groupReturn: "Return",
     groupRisk: "Risk",
     groupSource: "Return Decomposition",
@@ -256,10 +256,10 @@ export const dict = {
     downCapture: "Down Capture (%)",
     sourceNote: "Why worse trend quality can still win on cumulative return",
     sourceNoteText:
-      "Trend measures score the *path*; cumulative return depends on the *size* of each period's move compounded — the two can point opposite ways. This section splits the annualized return apart, with the identity: Annualized Return = Arithmetic Ann. Return − Volatility Drag. The arithmetic figure is the raw upward drift before compounding takes its cut; the drag is what a bumpy path costs each year (gaining and losing the same percentage leaves you below where you started, roughly variance/2). A 3x fund can pay a dozen times its underlying's drag and still finish far ahead, because its raw drift is 3x too. Up/Down Capture shows that mechanism: it takes ~3x of the benchmark's moves in both directions, and the benchmark simply had more up than down. Calmar (annualized return ÷ max drawdown) answers whether that extra return came at a discount or was paid for in full.",
+      "Trend measures score the *path*; cumulative return depends on the *size* of each period's move compounded — the two can point opposite ways. Volatility drag is what a bumpy path costs each year in compounded returns (gaining and losing the same percentage leaves you below where you started, roughly variance/2; Annualized Return ≈ Arithmetic Return − Volatility Drag). A 3x fund can pay a dozen times its underlying's drag and still finish far ahead, because its raw drift is 3x too. Up/Down Capture shows that mechanism: it takes ~3x of the benchmark's moves in both directions, and the benchmark simply had more up than down. Calmar (annualized return ÷ max drawdown) answers whether that extra return came at a discount or was paid for in full.",
     resolutionNote:
       "Note: the data source switches to monthly bars over longer ranges, so volatility, Sharpe, and drag aren't strictly comparable across different backtest lengths. The trend-direction measures all use month-end closes and are unaffected.",
-    groupIncome: "Bond / Income",
+    groupIncome: "Size & Yield",
     assetClass: "Asset Class",
     creditRating: "Credit Rating",
     fundSize: "Fund Size (AUM)",
@@ -273,9 +273,9 @@ export const dict = {
     freqAnnual: "Annual",
     freqOther: "Irregular",
     perYear: "/yr",
-    incomeNote: "Where the bond / income figures come from",
+    incomeNote: "Data sources for Size & Yield metrics",
     incomeNoteText:
-      "Est. Annual Yield is the distributions actually paid per share over the last 12 months divided by the latest close — a backward-looking realised yield, not a forecast. Bond payouts move with rates and holdings, so last year's figure is evidence, not a promise. Distribution Frequency is the number of payments in that same window (12 = monthly, 4 = quarterly). Fund Size is in the fund's own trading currency (USD for US-listed, TWD for Taiwan-listed), except that a comparison spanning both markets converts every figure to USD at the USD/TWD rate on the snapshot date — NT$167.4bn printed beside $41.5B otherwise reads as the larger of the two when it is about an eighth the size. If the rate can't be fetched the native figure is kept and labelled in its own currency rather than converted at a guessed rate. The figures were measured from the exchange on 2026-08-31. It was built as a live lookup, but the endpoint carrying net assets answers this site's host IPs with 429 Too Many Requests, so in production the figure never arrived at all — a dated snapshot of real numbers beats a live lookup that always renders a dash. Fund size moves slowly and is read for scale, so the date makes staleness visible; re-fetch to refresh it. Asset Class and Credit Rating are curated from each fund's official name, which under Taiwanese naming rules must state its credit tier; funds whose name states no tier are left blank rather than guessed — check the issuer's prospectus for an actual average rating. Individual stocks and uncatalogued symbols show a dash throughout.",
+      "Est. Annual Yield is the distributions actually paid per share over the last 12 months divided by the latest close — a backward-looking realised yield, not a forecast. Distribution Frequency is the number of payments in that same window (12 = monthly, 4 = quarterly). Fund Size is in the fund's own trading currency (USD for US-listed, TWD for Taiwan-listed), except that a comparison spanning both markets converts every figure to USD at the USD/TWD rate on the snapshot date (2026-08-31). Individual stocks and uncatalogued symbols show a dash throughout.",
     twoSuffixNote:
       "Note: Taiwan's bond ETFs all list on TPEx and carry a .TWO suffix rather than .TW; their currency (TWD) and benchmark (0050) are handled accordingly. Taiwan tickers drop the exchange suffix and carry their fund name, set on a second line centred under the code wherever a symbol labels something (table columns, chart legend, tags, rankings) and written inline as 00687B(Cathay US Treasury 20+ YR ETF TWD) where it has to sit in a sentence — these codes differ from one another by a single digit.",
     trendNote: "Long-term uptrend measures",
