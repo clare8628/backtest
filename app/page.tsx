@@ -8,7 +8,7 @@ import { loadGroups, upsertGroup, deleteGroup, newGroupId } from "@/lib/storage"
 import PerformanceChart, { SimSettings } from "@/components/PerformanceChart";
 import Sparkline from "@/components/Sparkline";
 import { simulateWithdrawnSeries } from "@/lib/backtest";
-import { APP_VERSION, BUILD_TIME_ISO, DISPLAY_VERSION } from "@/lib/version";
+import { APP_VERSION, BUILD_TIME_ISO, DISPLAY_VERSION, formatBuildStamp, formatBuildTime } from "@/lib/version";
 
 interface BacktestResult {
   metrics: BacktestMetrics[];
@@ -74,7 +74,6 @@ function SymbolLabel({ symbol, lang }: { symbol: string; lang: Lang }) {
 const DASH = "—";
 const pct = (v: number | null | undefined) => (v === undefined || v === null ? DASH : `${v}%`);
 const num = (v: number | null | undefined) => (v === undefined || v === null ? DASH : String(v));
-const text = (v: string | null | undefined) => (v ? v : DASH);
 
 /** Net assets in the fund's own currency, scaled to the unit that market
  *  actually quotes: 億 for TWD (a NT$167,000,000,000 fund is "1,674 億"), and
@@ -362,6 +361,23 @@ function MetricsTable({
 export default function Home() {
   const [lang, setLang] = useState<Lang>("zh");
   const T = useMemo(() => t(lang), [lang]);
+
+  // Ensure version badge and hover title match the client's local timezone
+  const [displayVersion, setDisplayVersion] = useState(DISPLAY_VERSION);
+  const [buildTimeTitle, setBuildTimeTitle] = useState(() => formatBuildTime(BUILD_TIME_ISO));
+
+  useEffect(() => {
+    if (BUILD_TIME_ISO) {
+      const stamp = formatBuildStamp(BUILD_TIME_ISO);
+      if (stamp) {
+        setDisplayVersion(`${APP_VERSION}+${stamp}`);
+      }
+      const timeStr = formatBuildTime(BUILD_TIME_ISO);
+      if (timeStr) {
+        setBuildTimeTitle(timeStr);
+      }
+    }
+  }, []);
 
   const [groups, setGroups] = useState<ComparisonGroup[]>([]);
   const [draftTitle, setDraftTitle] = useState("");
@@ -754,20 +770,21 @@ export default function Home() {
       {/* Flat nav on the base canvas — no border, no shadow, and exactly one
           filled pill, per the single-CTA pattern the system uses. */}
       <header>
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5 flex items-center justify-between">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <span aria-hidden className="font-display text-2xl leading-none">=</span>
             <span className="font-display text-lg">{T.title}</span>
             <span
+              suppressHydrationWarning
               className="text-[11px] font-mono px-2 py-0.5 rounded-full font-medium"
               style={{
                 background: "var(--orchid-band)",
                 color: "var(--orchid-ink)",
                 border: "1px solid rgba(142, 79, 174, 0.2)",
               }}
-              title={`Version ${APP_VERSION}${BUILD_TIME_ISO ? ` · built ${BUILD_TIME_ISO}` : ""}`}
+              title={`Version ${APP_VERSION}${buildTimeTitle ? ` · built ${buildTimeTitle}` : ""}`}
             >
-              v{DISPLAY_VERSION}
+              v{displayVersion}
             </span>
           </div>
           <button
@@ -786,7 +803,7 @@ export default function Home() {
       <div className="relative">
         <PixelStack side="left" />
         <PixelStack side="right" />
-        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 pt-20 sm:pt-28 pb-16 sm:pb-24 text-center">
+        <div className="relative max-w-[1600px] mx-auto px-4 sm:px-6 pt-20 sm:pt-28 pb-16 sm:pb-24 text-center">
           <h1 className="hero-title">
             {T.heroClaim}
             <br />
@@ -798,7 +815,7 @@ export default function Home() {
         </div>
       </div>
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 flex flex-col gap-8">
+      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 py-8 flex flex-col gap-8">
         {/* New comparison builder */}
         <section className="card p-4 sm:p-6 flex flex-col gap-4">
           <span className="eyebrow">1. {T.eyebrowBuild}</span>
@@ -1405,7 +1422,7 @@ export default function Home() {
       {/* Closing band and footer share one full-bleed orchid background with no
           hard break between them. */}
       <footer className="band-orchid mt-16">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-16 sm:py-20">
           <p className="font-display text-3xl sm:text-4xl max-w-2xl">
             {T.heroClaim}
             <br />

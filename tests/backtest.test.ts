@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, downsamplePrices, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev, incomeProfile, simulateWithdrawnSeries } from "@/lib/backtest";
 import { parseStooqCsv, toStooqSymbol, toYahooSymbol, splitsUnreported, getKnownSplits, KNOWN_SPLITS, isTaiwanListed, symbolCandidates, lookupSymbol } from "@/lib/marketData";
-import { displaySymbol, findEntry, fundSizeIn, getAssetClass, getCreditRating, getFundSize, getFundSizeUnavailableReason, getManagementFee, nativeCurrencyOf, registerDynamicSymbol, searchCatalog } from "@/lib/symbolCatalog";
+import { displaySymbol, findEntry, fundSizeIn, getAssetClass, getCreditRating, getFundSize, getFundSizeUnavailableReason, getManagementFee, hasKnownManagementFee, nativeCurrencyOf, registerDynamicSymbol, searchCatalog, SYMBOL_CATALOG } from "@/lib/symbolCatalog";
+import { formatBuildStamp, formatBuildTime } from "@/lib/version";
 import { PricePoint, BacktestMetrics, SymbolSeries } from "@/lib/types";
 
 function series(closes: number[]): PricePoint[] {
@@ -1027,6 +1028,63 @@ describe("ETF Split Events Tracking [BAC-1]", () => {
     expect(Math.abs((p2 - p1) / p1)).toBeLessThan(0.01);
   });
 });
+
+describe("version formatting in local timezone [BAC-11]", () => {
+  it("formats build stamp into compact local date and time string", () => {
+    const iso = "2026-10-11T09:36:00.000Z";
+    const stamp = formatBuildStamp(iso);
+    const date = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const expected = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}.${pad(date.getHours())}${pad(date.getMinutes())}`;
+    expect(stamp).toBe(expected);
+  });
+
+  it("formats build time into human-readable local date and time string", () => {
+    const iso = "2026-10-11T09:36:00.000Z";
+    const timeStr = formatBuildTime(iso);
+    const date = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const expected = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    expect(timeStr).toBe(expected);
+  });
+
+  it("handles undefined or invalid date strings gracefully", () => {
+    expect(formatBuildStamp(undefined)).toBe("");
+    expect(formatBuildStamp("invalid-date")).toBe("");
+    expect(formatBuildTime(undefined)).toBe("");
+    expect(formatBuildTime("invalid-date")).toBe("");
+  });
+});
+
+describe("catalog expense ratio completeness [BAC-11]", () => {
+  it("ensures every ETF in SYMBOL_CATALOG has a defined expenseRatio", () => {
+    const missingExpenseRatio = SYMBOL_CATALOG.filter(
+      (entry) => entry.category !== "Stock" && entry.expenseRatio === undefined
+    );
+    expect(missingExpenseRatio).toEqual([]);
+  });
+
+  it("provides verified management fees for Taiwan stock, leveraged, commodity and bond ETFs", () => {
+    expect(hasKnownManagementFee("00713.TW")).toBe(true);
+    expect(getManagementFee("00713.TW")).toBe(0.335);
+
+    expect(hasKnownManagementFee("00915.TW")).toBe(true);
+    expect(getManagementFee("00915.TW")).toBe(0.285);
+
+    expect(hasKnownManagementFee("00675L.TW")).toBe(true);
+    expect(getManagementFee("00675L.TW")).toBe(1.04);
+
+    expect(hasKnownManagementFee("00635U.TW")).toBe(true);
+    expect(getManagementFee("00635U.TW")).toBe(0.55);
+
+    expect(hasKnownManagementFee("00679B.TWO")).toBe(true);
+    expect(getManagementFee("00679B.TWO")).toBe(0.14);
+
+    expect(hasKnownManagementFee("00937B.TWO")).toBe(true);
+    expect(getManagementFee("00937B.TWO")).toBe(0.24);
+  });
+});
+
 
 
 
