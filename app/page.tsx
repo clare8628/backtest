@@ -66,7 +66,7 @@ function SymbolLabel({ symbol, lang }: { symbol: string; lang: Lang }) {
   return (
     <span className="inline-flex flex-col items-center leading-tight">
       <span className="text-xs font-semibold">{code}</span>
-      <span className="text-[11px] font-normal opacity-70 whitespace-nowrap">{name}</span>
+      <span className="text-xs font-normal opacity-75 whitespace-nowrap">{name}</span>
     </span>
   );
 }
@@ -151,7 +151,7 @@ function metricSections(
               return (
                 <span className="inline-flex items-center gap-1" style={{ color: "var(--negative)" }}>
                   <span>0</span>
-                  <span className="text-[10px] opacity-75 font-normal">
+                  <span className="text-xs opacity-75 font-normal">
                     ({T.depletedAt} {year})
                   </span>
                 </span>
@@ -187,7 +187,7 @@ function metricSections(
               <span className="inline-flex items-baseline justify-end gap-1 flex-wrap">
                 <span>{m.beta}</span>
                 {m.benchmarkSymbol && (
-                  <span className="text-[11px] opacity-60 font-normal">
+                  <span className="text-xs opacity-65 font-normal">
                     ({T.betaVs} {displaySymbol(m.benchmarkSymbol, lang)})
                   </span>
                 )}
@@ -233,7 +233,7 @@ function metricSections(
             return (
               <span className="inline-flex flex-col items-end leading-tight">
                 <span>{formatted}</span>
-                <span className="text-[10px] opacity-70 font-normal">({reason})</span>
+                <span className="text-[11px] opacity-70 font-normal">({reason})</span>
               </span>
             );
           },
@@ -312,9 +312,9 @@ function MetricsTable({
     <table className="w-full border-collapse metrics-table">
       <thead>
         <tr style={{ color: "var(--foreground-muted)" }}>
-          <th className="py-1.5 pr-4 text-left font-normal text-xs whitespace-nowrap">{T.metric}</th>
+          <th className="py-2 pr-4 text-left font-normal text-xs whitespace-nowrap">{T.metric}</th>
           {sortedMetrics.map((m) => (
-            <th key={m.symbol} className="py-1.5 px-2 text-right font-medium" style={{ color: "var(--foreground)" }}>
+            <th key={m.symbol} className="py-2 px-2 text-right font-medium" style={{ color: "var(--foreground)" }}>
               <SymbolLabel symbol={m.symbol} lang={lang} />
             </th>
           ))}
@@ -326,7 +326,7 @@ function MetricsTable({
             <tr>
               <td
                 colSpan={sortedMetrics.length + 1}
-                className="table-group pt-3 pb-1"
+                className="table-group pt-4 pb-1.5"
               >
                 {section.title}
               </td>
@@ -335,7 +335,7 @@ function MetricsTable({
               <tr key={row.label} className="metrics-row border-t cursor-default" style={{ borderColor: "var(--line)" }}>
                 <th
                   scope="row"
-                  className="py-1.5 pl-2 pr-4 text-left text-xs font-normal rounded-l whitespace-nowrap"
+                  className="py-2 pl-2 pr-4 text-left text-xs font-normal rounded-l whitespace-nowrap"
                   style={{ color: "var(--foreground-muted)" }}
                 >
                   {row.label}
@@ -343,7 +343,7 @@ function MetricsTable({
                 {sortedMetrics.map((m, idx) => (
                   <td
                     key={m.symbol}
-                    className={`py-1.5 px-2 text-right tabular-nums${idx === sortedMetrics.length - 1 ? " pr-2 rounded-r" : ""}`}
+                    className={`py-2 px-2 text-right tabular-nums${idx === sortedMetrics.length - 1 ? " pr-2 rounded-r" : ""}`}
                     style={{ color: row.color?.(m) }}
                   >
                     {row.value(m)}
