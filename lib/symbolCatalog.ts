@@ -144,6 +144,24 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "00927.TW", name: "群益半導體收益 ETF", nameEn: "Capital TIP Taiwan Semiconductor Dividend Yield ETF", category: "ETF", fundSizeSnapshot: 59920000000 },
   { symbol: "00631L.TW", name: "元大台灣50正2 ETF（2倍槓桿）", nameEn: "Yuanta Taiwan 50 Leveraged 2X ETF", category: "ETF", expenseRatio: 1.05, fundSizeSnapshot: 264845983744 },
   { symbol: "00632R.TW", name: "元大台灣50反1 ETF（反向1倍）", nameEn: "Yuanta Taiwan 50 Inverse 1X ETF", category: "ETF", expenseRatio: 1.00, fundSizeSnapshot: 22022539264 },
+  // --- Other issuers' leveraged/inverse products tracking the TAIEX (臺灣加權
+  // 股價指數), distinct from 00631L/00632R which track the narrower Taiwan 50.
+  // People who add 00631L to a comparison routinely add these alongside it
+  // (see BAC-9), so a blank fund-size column here is the most visible version
+  // of this gap. Names, issuers and fund sizes read from the exchange's own
+  // ETF info pages (twse.com.tw/zh/ETFortune/etfInfo/<symbol>), 2026-10-08.
+  { symbol: "00663L.TW", name: "國泰臺灣加權正2 ETF（2倍槓桿）", nameEn: "Cathay Taiwan Weighted Leveraged 2X ETF", category: "ETF", fundSizeSnapshot: 14786000000 },
+  { symbol: "00664R.TW", name: "國泰臺灣加權反1 ETF（反向1倍）", nameEn: "Cathay Taiwan Weighted Inverse 1X ETF", category: "ETF", fundSizeSnapshot: 1359000000 },
+  { symbol: "00675L.TW", name: "富邦臺灣加權正2 ETF（2倍槓桿）", nameEn: "Fubon Taiwan Weighted Leveraged 2X ETF", category: "ETF", fundSizeSnapshot: 38945000000 },
+  { symbol: "00676R.TW", name: "富邦臺灣加權反1 ETF（反向1倍）", nameEn: "Fubon Taiwan Weighted Inverse 1X ETF", category: "ETF", fundSizeSnapshot: 1028000000 },
+  { symbol: "00685L.TW", name: "群益臺灣加權正2 ETF（2倍槓桿）", nameEn: "Capital Taiwan Weighted Leveraged 2X ETF", category: "ETF", fundSizeSnapshot: 72762000000 },
+  { symbol: "00686R.TW", name: "群益臺灣加權反1 ETF（反向1倍）", nameEn: "Capital Taiwan Weighted Inverse 1X ETF", category: "ETF", fundSizeSnapshot: 244000000 },
+  // --- Commodity futures-tracking inverse ETFs (元大標普油金傘型期貨信託基金),
+  // a different underlying from the equity-index products above. Already had
+  // Yahoo-adjustment workarounds in marketData.ts for a past reverse split but
+  // were never added to the catalog, so fund size showed blank.
+  { symbol: "00673R.TW", name: "元大S&P原油反1 ETF（反向1倍）", nameEn: "Yuanta S&P Crude Oil Inverse 1X ETF", category: "Commodity ETF", fundSizeSnapshot: 13770000000 },
+  { symbol: "00674R.TW", name: "元大S&P黃金反1 ETF（反向1倍）", nameEn: "Yuanta S&P Gold Inverse 1X ETF", category: "Commodity ETF", fundSizeSnapshot: 429000000 },
   // --- Bond ETFs, for evaluating retirement income rather than capital gains.
   // Taiwan-listed bond ETFs trade on TPEx, not the TWSE, so they carry the
   // .TWO suffix (a .TW lookup returns nothing at all for every one of them).
