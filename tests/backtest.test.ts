@@ -1030,22 +1030,32 @@ describe("ETF Split Events Tracking [BAC-1]", () => {
 });
 
 describe("version formatting in local timezone [BAC-11]", () => {
-  it("formats build stamp into compact local date and time string", () => {
+  it("formats build stamp into compact local date and time string in Asia/Taipei timezone by default", () => {
+    // 09:36:00 UTC corresponds to 17:36:00 in Asia/Taipei (UTC+8)
     const iso = "2026-10-11T09:36:00.000Z";
     const stamp = formatBuildStamp(iso);
-    const date = new Date(iso);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const expected = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}.${pad(date.getHours())}${pad(date.getMinutes())}`;
-    expect(stamp).toBe(expected);
+    expect(stamp).toBe("20261011.1736");
   });
 
-  it("formats build time into human-readable local date and time string", () => {
+  it("formats build time into human-readable local date and time string in Asia/Taipei timezone by default", () => {
     const iso = "2026-10-11T09:36:00.000Z";
     const timeStr = formatBuildTime(iso);
-    const date = new Date(iso);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const expected = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-    expect(timeStr).toBe(expected);
+    expect(timeStr).toBe("2026-10-11 17:36");
+  });
+
+  it("accurately handles midnight rollover in local timezone", () => {
+    // 16:05:00 UTC corresponds to 00:05:00 on the following day in Asia/Taipei
+    const iso = "2026-10-11T16:05:00.000Z";
+    expect(formatBuildStamp(iso)).toBe("20261012.0005");
+    expect(formatBuildTime(iso)).toBe("2026-10-12 00:05");
+  });
+
+  it("supports explicit custom timezone parameter", () => {
+    const iso = "2026-10-11T09:36:00.000Z";
+    expect(formatBuildStamp(iso, "UTC")).toBe("20261011.0936");
+    expect(formatBuildTime(iso, "UTC")).toBe("2026-10-11 09:36");
+    expect(formatBuildStamp(iso, "Asia/Tokyo")).toBe("20261011.1836");
+    expect(formatBuildTime(iso, "Asia/Tokyo")).toBe("2026-10-11 18:36");
   });
 
   it("handles undefined or invalid date strings gracefully", () => {
@@ -1082,6 +1092,17 @@ describe("catalog expense ratio completeness [BAC-11]", () => {
 
     expect(hasKnownManagementFee("00937B.TWO")).toBe(true);
     expect(getManagementFee("00937B.TWO")).toBe(0.24);
+  });
+
+  it("defaults dynamically registered individual stocks to 0% expenseRatio", () => {
+    registerDynamicSymbol({
+      symbol: "TEST_STOCK_2330",
+      name: "測試台積電",
+      nameEn: "Test TSMC",
+      category: "Stock",
+    });
+    expect(hasKnownManagementFee("TEST_STOCK_2330")).toBe(true);
+    expect(getManagementFee("TEST_STOCK_2330")).toBe(0);
   });
 });
 

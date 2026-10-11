@@ -349,6 +349,9 @@ const DYNAMIC_CATALOG: Map<string, CatalogEntry> = new Map();
  */
 export function registerDynamicSymbol(entry: CatalogEntry) {
   const key = entry.symbol.trim().toUpperCase();
+  if (entry.category === "Stock" && entry.expenseRatio === undefined) {
+    entry.expenseRatio = 0;
+  }
   DYNAMIC_CATALOG.set(key, entry);
 }
 

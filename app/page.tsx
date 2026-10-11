@@ -362,19 +362,24 @@ export default function Home() {
   const [lang, setLang] = useState<Lang>("zh");
   const T = useMemo(() => t(lang), [lang]);
 
-  // Ensure version badge and hover title match the client's local timezone
+  // Ensure version badge and hover title match the client's local timezone (default Asia/Taipei)
   const [displayVersion, setDisplayVersion] = useState(DISPLAY_VERSION);
   const [buildTimeTitle, setBuildTimeTitle] = useState(() => formatBuildTime(BUILD_TIME_ISO));
 
   useEffect(() => {
     if (BUILD_TIME_ISO) {
-      const stamp = formatBuildStamp(BUILD_TIME_ISO);
-      if (stamp) {
-        setDisplayVersion(`${APP_VERSION}+${stamp}`);
-      }
-      const timeStr = formatBuildTime(BUILD_TIME_ISO);
-      if (timeStr) {
-        setBuildTimeTitle(timeStr);
+      try {
+        const clientTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const stamp = formatBuildStamp(BUILD_TIME_ISO, clientTimeZone);
+        if (stamp) {
+          setDisplayVersion(`${APP_VERSION}+${stamp}`);
+        }
+        const timeStr = formatBuildTime(BUILD_TIME_ISO, clientTimeZone);
+        if (timeStr) {
+          setBuildTimeTitle(timeStr);
+        }
+      } catch {
+        // Fallback already covered by default Asia/Taipei timezone
       }
     }
   }, []);
