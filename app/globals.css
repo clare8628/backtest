@@ -138,6 +138,25 @@ h3,
   box-shadow: 0 0 0 1.5px var(--orchid-ink), 0 4px 16px rgba(142, 79, 174, 0.12);
 }
 
+.gallery-tile.is-dragging {
+  opacity: 0.45;
+  transform: scale(0.98);
+  border-style: dashed;
+}
+
+.gallery-tile.is-drop-target {
+  box-shadow: 0 0 0 2px var(--orchid-band), 0 6px 20px rgba(142, 79, 174, 0.15);
+}
+
+.drag-handle {
+  cursor: grab;
+  user-select: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
 .workbench-panel {
   background: var(--surface);
   border: 1px solid var(--line);

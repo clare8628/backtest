@@ -4,7 +4,7 @@ import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react
 import { t, Lang } from "@/lib/i18n";
 import { displaySymbol, findEntry, registerDynamicSymbol, searchCatalog, symbolLabel } from "@/lib/symbolCatalog";
 import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries, Currency } from "@/lib/types";
-import { loadGroups, upsertGroup, deleteGroup, newGroupId } from "@/lib/storage";
+import { loadGroups, upsertGroup, reorderGroups, deleteGroup, newGroupId } from "@/lib/storage";
 import PerformanceChart, { SimSettings } from "@/components/PerformanceChart";
 import Sparkline from "@/components/Sparkline";
 import { simulateWithdrawnSeries } from "@/lib/backtest";
@@ -36,6 +36,18 @@ function trendColor(value: number | null | undefined, neutral = 0): string | und
   if (value > neutral) return "var(--positive)";
   if (value < neutral) return "var(--negative)";
   return undefined;
+}
+
+export function reorderArray<T>(list: T[], sourceIndex: number, targetIndex: number, placeAfter: boolean): T[] {
+  if (sourceIndex === targetIndex) return list;
+  const item = list[sourceIndex];
+  const without = list.filter((_, i) => i !== sourceIndex);
+  const targetItem = list[targetIndex];
+  const newTargetIndex = without.indexOf(targetItem);
+  const insertIndex = placeAfter ? newTargetIndex + 1 : newTargetIndex;
+  const result = [...without];
+  result.splice(insertIndex, 0, item);
+  return result;
 }
 
 function Note({ title, body }: { title: string; body: string }) {
@@ -399,6 +411,10 @@ export default function Home() {
   /** Which tile is open. One at a time: an open tile spans the whole grid row,
    *  so two of them would leave no gallery to come back to. */
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
+  const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; position: "before" | "after" } | null>(null);
+  const draggedRef = useRef(false);
+  const draggedGroupIdRef = useRef<string | null>(null);
 
   function setExpandedWithUrl(id: string | null) {
     setExpandedGroupId(id);
@@ -954,17 +970,95 @@ export default function Home() {
             const result = results[g.id];
             const isLoading = loadingId === g.id;
             const isSelected = expandedGroupId === g.id;
+            const isDragging = draggedGroupId === g.id;
+            const isDropTarget = dropTarget?.id === g.id;
             const topMetric = result?.metrics && result.metrics.length > 0
               ? [...result.metrics].sort((a, b) => b.annualizedReturn - a.annualizedReturn)[0]
               : null;
             return (
               <div
                 key={g.id}
-                className={`card gallery-tile p-4 sm:p-5 flex flex-col gap-3${isSelected ? " is-active" : ""}`}
+                draggable={renamingId !== g.id}
+                onDragStart={(e) => {
+                  draggedRef.current = false;
+                  draggedGroupIdRef.current = g.id;
+                  setDraggedGroupId(g.id);
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", g.id);
+                }}
+                onDrag={() => {
+                  draggedRef.current = true;
+                }}
+                onDragEnd={() => {
+                  setDraggedGroupId(null);
+                  setDropTarget(null);
+                  setTimeout(() => {
+                    draggedRef.current = false;
+                    draggedGroupIdRef.current = null;
+                  }, 100);
+                }}
+                onDragOver={(e) => {
+                  if (!draggedGroupIdRef.current || draggedGroupIdRef.current === g.id) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const isAfter = (e.clientX - rect.left) > rect.width / 2;
+                  const position = isAfter ? "after" : "before";
+                  setDropTarget((prev) => {
+                    if (prev?.id === g.id && prev?.position === position) return prev;
+                    return { id: g.id, position };
+                  });
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setDropTarget((prev) => (prev?.id === g.id ? null : prev));
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const sourceId = draggedGroupIdRef.current || e.dataTransfer.getData("text/plain");
+                  if (!sourceId || sourceId === g.id) {
+                    setDraggedGroupId(null);
+                    setDropTarget(null);
+                    return;
+                  }
+                  const sourceIndex = groups.findIndex((item) => item.id === sourceId);
+                  const targetIndex = groups.findIndex((item) => item.id === g.id);
+                  if (sourceIndex === -1 || targetIndex === -1) {
+                    setDraggedGroupId(null);
+                    setDropTarget(null);
+                    return;
+                  }
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const placeAfter = (e.clientX - rect.left) > rect.width / 2;
+                  const reordered = reorderArray(groups, sourceIndex, targetIndex, placeAfter);
+                  const withOrder = reordered.map((item, idx) => ({ ...item, sortOrder: idx }));
+                  setGroups(withOrder);
+                  reorderGroups(withOrder);
+                  setDraggedGroupId(null);
+                  setDropTarget(null);
+                }}
+                className={`card gallery-tile p-4 sm:p-5 flex flex-col gap-3 relative${isSelected ? " is-active" : ""}${isDragging ? " is-dragging" : ""}${isDropTarget ? " is-drop-target" : ""}`}
               >
+                {/* Visual drop indicator edge */}
+                {isDropTarget && dropTarget?.position === "before" && (
+                  <div
+                    className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-[calc(var(--radius-card)-1px)] z-20 pointer-events-none"
+                    style={{ background: "var(--orchid-ink)", boxShadow: "2px 0 8px rgba(142, 79, 174, 0.4)" }}
+                  />
+                )}
+                {isDropTarget && dropTarget?.position === "after" && (
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-[calc(var(--radius-card)-1px)] z-20 pointer-events-none"
+                    style={{ background: "var(--orchid-ink)", boxShadow: "-2px 0 8px rgba(142, 79, 174, 0.4)" }}
+                  />
+                )}
                 <div
                   className="flex flex-col gap-3 cursor-pointer flex-1"
-                  onClick={() => setExpandedWithUrl(isSelected ? null : g.id)}
+                  onClick={() => {
+                    if (draggedRef.current) return;
+                    setExpandedWithUrl(isSelected ? null : g.id);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
@@ -977,42 +1071,59 @@ export default function Home() {
                   aria-label={`${g.title} - ${isSelected ? T.collapse : T.expand}`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        {renamingId === g.id ? (
-                          <input
-                            autoFocus
-                            defaultValue={g.title}
-                            aria-label={T.groupTitleLabel}
-                            maxLength={80}
-                            className="font-display text-xl w-full min-w-0 bg-transparent border-b outline-none"
-                            style={{ borderColor: "var(--line)" }}
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => {
-                              e.stopPropagation();
-                              if (e.key === "Enter") e.currentTarget.blur();
-                              if (e.key === "Escape") setRenamingId(null);
-                            }}
-                            onBlur={(e) => {
-                              commitGroupTitle(g, e.currentTarget.value);
-                              setRenamingId(null);
-                            }}
-                          />
-                        ) : (
-                          <h3 className="font-display text-xl truncate">{g.title}</h3>
-                        )}
-                        {isSelected && (
-                          <span
-                            className="px-2 py-0.5 text-[11px] font-medium rounded-full shrink-0"
-                            style={{ background: "var(--orchid-band)", color: "var(--orchid-ink)" }}
-                          >
-                            {lang === "zh" ? "檢視中" : "Inspecting"}
-                          </span>
-                        )}
+                    <div className="flex items-start gap-2 min-w-0 flex-1">
+                      <div
+                        className="drag-handle mt-0.5 p-1 -ml-1 rounded cursor-grab active:cursor-grabbing text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0 flex items-center justify-center"
+                        title={T.dragToReorder}
+                        aria-label={T.dragToReorder}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                          <circle cx="5" cy="3" r="1.5" />
+                          <circle cx="11" cy="3" r="1.5" />
+                          <circle cx="5" cy="8" r="1.5" />
+                          <circle cx="11" cy="8" r="1.5" />
+                          <circle cx="5" cy="13" r="1.5" />
+                          <circle cx="11" cy="13" r="1.5" />
+                        </svg>
                       </div>
-                      <p className="text-xs mt-0.5 truncate" style={{ color: "var(--foreground-muted)" }}>
-                        {g.symbols.map((s) => displaySymbol(s, lang)).join(", ") || "—"}
-                      </p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          {renamingId === g.id ? (
+                            <input
+                              autoFocus
+                              defaultValue={g.title}
+                              aria-label={T.groupTitleLabel}
+                              maxLength={80}
+                              className="font-display text-xl w-full min-w-0 bg-transparent border-b outline-none py-0.5"
+                              style={{ borderColor: "var(--line)" }}
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === "Enter") e.currentTarget.blur();
+                                if (e.key === "Escape") setRenamingId(null);
+                              }}
+                              onBlur={(e) => {
+                                commitGroupTitle(g, e.currentTarget.value);
+                                setRenamingId(null);
+                              }}
+                            />
+                          ) : (
+                            <h3 className="font-display text-xl truncate">{g.title}</h3>
+                          )}
+                          {isSelected && (
+                            <span
+                              className="px-2 py-0.5 text-[11px] font-medium rounded-full shrink-0"
+                              style={{ background: "var(--orchid-band)", color: "var(--orchid-ink)" }}
+                            >
+                              {lang === "zh" ? "檢視中" : "Inspecting"}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs mt-0.5 truncate" style={{ color: "var(--foreground-muted)" }}>
+                          {g.symbols.map((s) => displaySymbol(s, lang)).join(", ") || "—"}
+                        </p>
+                      </div>
                     </div>
                     <span
                       aria-hidden
@@ -1058,7 +1169,15 @@ export default function Home() {
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-2 mt-auto pt-2 border-t" style={{ borderColor: "var(--line)" }}>
+                <div
+                  className="flex flex-wrap gap-2 mt-auto pt-2 border-t"
+                  style={{ borderColor: "var(--line)" }}
+                  draggable={false}
+                  onDragStart={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                  }}
+                >
                   <button
                     onClick={() => {
                       setExpandedWithUrl(g.id);
@@ -1122,16 +1241,22 @@ export default function Home() {
               <div className="workbench-panel p-5 sm:p-7 flex flex-col gap-6">
                 {/* Header info & action bar */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b" style={{ borderColor: "var(--line)" }}>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <input
                       key={`${g.id}:${g.title}`}
                       defaultValue={g.title}
                       aria-label={T.groupTitleLabel}
                       placeholder={T.groupTitleLabel}
                       maxLength={80}
-                      className="font-display text-2xl sm:text-3xl w-full bg-transparent border-b outline-none"
+                      className="font-display text-2xl sm:text-3xl w-full bg-transparent border-b outline-none py-0.5 transition-colors focus:border-[var(--orchid-ink)]"
                       style={{ borderColor: "var(--line)" }}
-                      onBlur={(e) => commitGroupTitle(g, e.currentTarget.value)}
+                      onFocus={(e) => {
+                        e.currentTarget.style.borderColor = "var(--orchid-ink)";
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.borderColor = "var(--line)";
+                        commitGroupTitle(g, e.currentTarget.value);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") e.currentTarget.blur();
                       }}

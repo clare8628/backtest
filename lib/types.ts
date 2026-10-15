@@ -139,6 +139,8 @@ export interface ComparisonGroup {
    * hand also sets it. Once set, the auto-fit never runs for that group again.
    */
   rangeFitted?: boolean;
+  /** Display sequence order (0-based) for manual drag-and-drop sorting */
+  sortOrder?: number;
 }
 
 export interface IndexedPoint {

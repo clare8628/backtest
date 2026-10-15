@@ -101,11 +101,32 @@ async function pushGroup(group: ComparisonGroup): Promise<boolean> {
 export async function upsertGroup(group: ComparisonGroup): Promise<ComparisonGroup[]> {
   const groups = await loadGroups();
   const idx = groups.findIndex((g) => g.id === group.id);
-  const next = idx >= 0 ? groups.map((g) => (g.id === group.id ? group : g)) : [...groups, group];
+  const next = idx >= 0 ? groups.map((g) => (g.id === group.id ? group : g)) : [group, ...groups];
   cachedGroups = next;
 
   if (!(await pushGroup(group))) writeLocal(next);
   return next;
+}
+
+export async function reorderGroups(groups: ComparisonGroup[]): Promise<ComparisonGroup[]> {
+  cachedGroups = groups;
+  writeLocal(groups);
+
+  if (remotePersists !== false) {
+    try {
+      const response = await fetch("/api/portfolios", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: groups.map((g) => g.id) }),
+      });
+      const ok = await persistedOk(response);
+      if (!ok) remotePersists = false;
+    } catch {
+      remotePersists = false;
+    }
+  }
+
+  return groups;
 }
 
 export async function deleteGroup(id: string): Promise<ComparisonGroup[]> {

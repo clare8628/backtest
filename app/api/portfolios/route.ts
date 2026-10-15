@@ -30,16 +30,23 @@ async function getDB(): Promise<D1Database | undefined> {
 let schemaReady: Promise<void> | null = null;
 function ensureSchema(db: D1Database): Promise<void> {
   if (!schemaReady) {
-    schemaReady = Promise.resolve(
-      db.prepare("ALTER TABLE portfolios ADD COLUMN rangeFitted INTEGER DEFAULT 0").run()
-    )
-      .then(() => undefined)
-      .catch((e: unknown) => {
+    schemaReady = (async () => {
+      try {
+        await db.prepare("ALTER TABLE portfolios ADD COLUMN rangeFitted INTEGER DEFAULT 0").run();
+      } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        if (/duplicate column name/i.test(msg)) return; // already applied
-        schemaReady = null;
-        throw e;
-      });
+        if (!/duplicate column name/i.test(msg)) throw e;
+      }
+      try {
+        await db.prepare("ALTER TABLE portfolios ADD COLUMN sortOrder INTEGER DEFAULT 0").run();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/duplicate column name/i.test(msg)) throw e;
+      }
+    })().catch((e) => {
+      schemaReady = null;
+      throw e;
+    });
   }
   return schemaReady;
 }
@@ -67,7 +74,7 @@ export async function GET() {
     // Non-fatal for reads: SELECT * is fine whether or not the column landed.
     await ensureSchema(db).catch((e) => console.error("ensureSchema (GET):", e));
 
-    const result = await db.prepare("SELECT * FROM portfolios ORDER BY createdAt DESC").all();
+    const result = await db.prepare("SELECT * FROM portfolios ORDER BY sortOrder ASC, createdAt DESC").all();
     const groups: ComparisonGroup[] = (result.results || []).map((row: Record<string, unknown>) => ({
       id: String(row.id ?? ""),
       title: String(row.title ?? ""),
@@ -80,6 +87,7 @@ export async function GET() {
       // behaviour asked for. After that the client sets this (auto-fit ran, or
       // the slider was moved) and the group is left alone.
       rangeFitted: Boolean(row.rangeFitted),
+      sortOrder: Number(row.sortOrder) || 0,
     }));
 
     return Response.json({ groups, persisted: true });
@@ -93,7 +101,7 @@ export async function POST(request: Request) {
   try {
     const db = await getDB();
     const body = await request.json();
-    const { id, title, symbols, rangeYears, startValue, rangeFitted, createdAt } =
+    const { id, title, symbols, rangeYears, startValue, rangeFitted, sortOrder, createdAt } =
       body as ComparisonGroup;
 
     if (!id || !title || !symbols || rangeYears === undefined) {
@@ -104,13 +112,14 @@ export async function POST(request: Request) {
       return Response.json({ success: true, id, persisted: false });
     }
 
-    // The UPDATE/INSERT below write rangeFitted, so the column has to exist
+    // The UPDATE/INSERT below write rangeFitted and sortOrder, so the columns have to exist
     // first. A failure here falls through to the catch → persisted:false, and
     // the client keeps its localStorage copy until the next successful write.
     await ensureSchema(db);
 
     const now = new Date().toISOString();
     const symbolsJson = JSON.stringify(symbols);
+    const order = typeof sortOrder === "number" ? sortOrder : 0;
 
     // Check if already exists
     const existing = await db
@@ -121,14 +130,14 @@ export async function POST(request: Request) {
     if (existing) {
       await db
         .prepare(
-          "UPDATE portfolios SET title = ?, symbols = ?, rangeYears = ?, startValue = ?, rangeFitted = ?, updatedAt = ? WHERE id = ?"
+          "UPDATE portfolios SET title = ?, symbols = ?, rangeYears = ?, startValue = ?, rangeFitted = ?, sortOrder = ?, updatedAt = ? WHERE id = ?"
         )
-        .bind(title, symbolsJson, rangeYears, startValue || 1000, rangeFitted ? 1 : 0, now, id)
+        .bind(title, symbolsJson, rangeYears, startValue || 1000, rangeFitted ? 1 : 0, order, now, id)
         .run();
     } else {
       await db
         .prepare(
-          "INSERT INTO portfolios (id, title, symbols, rangeYears, startValue, rangeFitted, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO portfolios (id, title, symbols, rangeYears, startValue, rangeFitted, sortOrder, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(
           id,
@@ -137,6 +146,7 @@ export async function POST(request: Request) {
           rangeYears,
           startValue || 1000,
           rangeFitted ? 1 : 0,
+          order,
           createdAt || now,
           now
         )
@@ -146,6 +156,36 @@ export async function POST(request: Request) {
     return Response.json({ success: true, id, persisted: true });
   } catch (error) {
     console.error("Failed to save portfolio:", error);
+    return Response.json({ success: false, persisted: false }, { status: 503 });
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const db = await getDB();
+    const body = await request.json();
+    const { order } = body as { order?: string[] };
+
+    if (!Array.isArray(order)) {
+      return Response.json({ error: "Missing order array" }, { status: 400 });
+    }
+
+    if (!db) {
+      return Response.json({ success: true, persisted: false });
+    }
+
+    await ensureSchema(db);
+
+    for (let i = 0; i < order.length; i++) {
+      await db
+        .prepare("UPDATE portfolios SET sortOrder = ? WHERE id = ?")
+        .bind(i, order[i])
+        .run();
+    }
+
+    return Response.json({ success: true, persisted: true });
+  } catch (error) {
+    console.error("Failed to reorder portfolios:", error);
     return Response.json({ success: false, persisted: false }, { status: 503 });
   }
 }
