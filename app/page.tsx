@@ -3,7 +3,7 @@
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { t, Lang } from "@/lib/i18n";
 import { displaySymbol, findEntry, registerDynamicSymbol, searchCatalog, symbolLabel } from "@/lib/symbolCatalog";
-import { stripSimSuffix } from "@/lib/leverageSim";
+import { getLeverageSpec, parseSymbolVariant, realVariantSymbol, stripSimSuffix } from "@/lib/leverageSim";
 import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries, Currency } from "@/lib/types";
 import { loadGroups, upsertGroup, reorderGroups, deleteGroup, newGroupId } from "@/lib/storage";
 import PerformanceChart, { SimSettings } from "@/components/PerformanceChart";
@@ -29,6 +29,17 @@ const RANGE_MIN = 1;
 const RANGE_MAX = 20;
 const DEFAULT_RANGE_YEARS = 5;
 const MAX_SYMBOLS_PER_GROUP = 15;
+
+/** The storage/dedup key for an add-symbol input: the canonical ticker as-is,
+ *  unless it explicitly asked for the real-only variant (trailing "@real")
+ *  of a symbol that actually has a leveraged-ETF simulation spec — in which
+ *  case it gets the distinct "@real"-tagged key so it can coexist in the
+ *  group alongside that symbol's default (auto-simulated) entry. "@real" on
+ *  a symbol with nothing to simulate has no effect. */
+function addSymbolKey(canonical: string, forceReal: boolean): string {
+  const spec = getLeverageSpec(canonical) ?? getLeverageSpec(`${canonical}.TW`);
+  return forceReal && spec ? realVariantSymbol(canonical) : canonical;
+}
 
 /** Blue above `neutral`, red below — used for the signed trend measures, where
  *  the sign (not the magnitude) is what says "uptrend" vs "downtrend". */
@@ -217,8 +228,6 @@ function metricSections(
           value: (m) => (m.volatilityDrag === undefined ? DASH : `-${m.volatilityDrag}%`),
           color: () => "var(--negative)",
         },
-        { label: T.upCapture, value: (m) => pct(m.upCapture) },
-        { label: T.downCapture, value: (m) => pct(m.downCapture) },
       ],
     },
     {
@@ -257,6 +266,21 @@ function metricSections(
           color: (m) => (m.estimatedYieldPct ? "var(--positive)" : undefined),
         },
         { label: T.distributionFreq, value: (m) => distributionLabel(m.distributionsPerYear, T) },
+        { label: T.latestExDate, value: (m) => m.latestExDate ?? DASH },
+        {
+          label: T.latestDistribution,
+          value: (m) => (m.latestDistribution == null ? DASH : String(m.latestDistribution)),
+        },
+        {
+          label: T.latestAnnualizedYield,
+          value: (m) => pct(m.latestAnnualizedYieldPct),
+          color: (m) => (m.latestAnnualizedYieldPct ? "var(--positive)" : undefined),
+        },
+        {
+          label: T.avgAnnualizedYield,
+          value: (m) => pct(m.avgAnnualizedYieldPct),
+          color: (m) => (m.avgAnnualizedYieldPct ? "var(--positive)" : undefined),
+        },
       ],
     },
     {
@@ -448,12 +472,13 @@ export default function Home() {
   const [refreshSuccessGroupId, setRefreshSuccessGroupId] = useState<string | null>(null);
 
   async function addSymbol(sym: string) {
-    const s = stripSimSuffix(sym).trim().toUpperCase();
+    const { base, forceReal } = parseSymbolVariant(sym);
+    const s = base.trim().toUpperCase();
     if (!s) return;
-    if (draftSymbols.includes(s)) {
-      if (s !== sym.trim().toUpperCase()) {
-        alert(T.symbolAlreadyInGroup.replace("{symbol}", s));
-      }
+    const hadSuffix = s !== sym.trim().toUpperCase();
+    const earlyKey = addSymbolKey(s, forceReal);
+    if (draftSymbols.includes(earlyKey)) {
+      if (hadSuffix) alert(T.symbolAlreadyInGroup.replace("{symbol}", earlyKey));
       return;
     }
     if (draftSymbols.length >= MAX_SYMBOLS_PER_GROUP) {
@@ -467,8 +492,11 @@ export default function Home() {
     const known = findEntry(s);
     if (known) {
       const canonical = known.symbol.toUpperCase();
-      if (!draftSymbols.includes(canonical)) {
-        setDraftSymbols([...draftSymbols, canonical]);
+      const key = addSymbolKey(canonical, forceReal);
+      if (!draftSymbols.includes(key)) {
+        setDraftSymbols([...draftSymbols, key]);
+      } else if (hadSuffix) {
+        alert(T.symbolAlreadyInGroup.replace("{symbol}", key));
       }
       setQuery("");
       return;
@@ -492,8 +520,11 @@ export default function Home() {
           category: data.category || "Stock",
         });
         const canonical = data.canonicalSymbol.toUpperCase();
-        if (!draftSymbols.includes(canonical)) {
-          setDraftSymbols([...draftSymbols, canonical]);
+        const key = addSymbolKey(canonical, forceReal);
+        if (!draftSymbols.includes(key)) {
+          setDraftSymbols([...draftSymbols, key]);
+        } else if (hadSuffix) {
+          alert(T.symbolAlreadyInGroup.replace("{symbol}", key));
         }
         setQuery("");
       } else {

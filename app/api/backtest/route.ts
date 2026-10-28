@@ -21,6 +21,7 @@ import {
   hasKnownManagementFee,
   nativeCurrencyOf,
 } from "@/lib/symbolCatalog";
+import { parseSymbolVariant } from "@/lib/leverageSim";
 
 // A Taiwan-listed fund's daily correlation to the US market isn't a meaningful
 // "Beta" for it, so each symbol is measured against its own market's benchmark:
@@ -108,23 +109,37 @@ export async function POST(req: NextRequest) {
     const windowedYears: Record<string, number> = {};
     for (const s of results) windowedYears[s.symbol] = seriesYears(s.prices);
 
+    // A symbol's explicit "@real" entry (the un-simulated counterpart of a
+    // leveraged ETF, kept side by side with that ETF's default auto-simulated
+    // entry) always has less history than its sibling by design — it must not
+    // drag the whole group's shared start forward to its own later real
+    // inception, or the very simulated stretch the user added it to compare
+    // against would get aligned away.
+    const realOnlySymbols = new Set(
+      results.filter((s) => parseSymbolVariant(s.symbol).forceReal).map((s) => s.symbol)
+    );
+
     // Auto-align the whole group to the overlapping window shared by every
     // symbol, pegged to whichever one has the shortest available history, so
     // headline metrics never silently span different eras across symbols.
-    const window = commonWindow(results);
+    const window = commonWindow(results, realOnlySymbols);
     const alignedResults = window
       ? results.map((s) => ({ ...s, prices: trimToWindow(s.prices, window) }))
       : results;
 
-    const yearsValues = results.map((s) => windowedYears[s.symbol]);
+    // Same exclusion for the "which symbol is constraining this group"
+    // explanation — an @real entry having less history is expected and not
+    // what's constraining anyone else's window.
+    const constraintCandidates = results.filter((s) => !realOnlySymbols.has(s.symbol));
+    const yearsValues = constraintCandidates.map((s) => windowedYears[s.symbol]);
     const minYears = yearsValues.length > 0 ? Math.min(...yearsValues) : 0;
     const maxYears = yearsValues.length > 0 ? Math.max(...yearsValues) : 0;
     // Only call out a "constraint" when history lengths actually differ —
     // if every symbol already covers the full requested range there's nothing
     // to explain.
     const constrainedBy =
-      results.length > 1 && maxYears - minYears > 0.05
-        ? results.find((s) => windowedYears[s.symbol] === minYears)?.symbol ?? null
+      constraintCandidates.length > 1 && maxYears - minYears > 0.05
+        ? constraintCandidates.find((s) => windowedYears[s.symbol] === minYears)?.symbol ?? null
         : null;
 
     // Fetch whichever benchmark(s) the group's symbols need, reusing an
@@ -205,6 +220,12 @@ export async function POST(req: NextRequest) {
         estimatedYieldPct:
           income.estimatedYieldPct === null ? null : round2(income.estimatedYieldPct),
         distributionsPerYear: income.distributionsPerYear,
+        latestDistribution: income.latestDistribution === null ? null : Math.round(income.latestDistribution * 10000) / 10000,
+        latestExDate: income.latestExDate,
+        latestAnnualizedYieldPct:
+          income.latestAnnualizedYieldPct === null ? null : round2(income.latestAnnualizedYieldPct),
+        avgAnnualizedYieldPct:
+          income.avgAnnualizedYieldPct === null ? null : round2(income.avgAnnualizedYieldPct),
         managementFeeKnown: hasKnownManagementFee(s.symbol),
       };
     });

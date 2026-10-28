@@ -26,53 +26,6 @@ export function periodsPerYear(prices: PricePoint[]): number {
   return Math.min(TRADING_DAYS_PER_YEAR, Math.max(1, (prices.length - 1) / years));
 }
 
-/**
- * Up/down capture: how much of the benchmark's average move this symbol picks
- * up in the periods when the benchmark rose, and when it fell — each as a % of
- * the benchmark's own average move. A 3x leveraged fund lands near 300%/300%;
- * a defensive holding shows less down-capture than up-capture.
- *
- * This is the mechanism behind a leveraged fund out-earning its underlying
- * despite a rougher path: it takes ~3x of every move in both directions, and
- * the underlying simply had more up than down to give.
- *
- * Returns are date-aligned (inner join) the same way Beta is, since the two
- * series can have slightly different trading calendars. Null when too few
- * periods overlap to mean anything.
- */
-export function captureRatios(
-  assetReturns: { date: string; value: number }[],
-  marketReturns: { date: string; value: number }[]
-): { up: number | null; down: number | null } {
-  const marketByDate = new Map(marketReturns.map((r) => [r.date, r.value]));
-  let upAsset = 0;
-  let upMarket = 0;
-  let upCount = 0;
-  let downAsset = 0;
-  let downMarket = 0;
-  let downCount = 0;
-  for (const r of assetReturns) {
-    const m = marketByDate.get(r.date);
-    if (m === undefined) continue;
-    if (m > 0) {
-      upAsset += r.value;
-      upMarket += m;
-      upCount++;
-    } else if (m < 0) {
-      downAsset += r.value;
-      downMarket += m;
-      downCount++;
-    }
-  }
-  // Same denominator count on both sides of each ratio, so summing is
-  // equivalent to averaging and avoids a needless division.
-  const MIN_PERIODS = 5;
-  return {
-    up: upCount >= MIN_PERIODS && upMarket !== 0 ? (upAsset / upMarket) * 100 : null,
-    down: downCount >= MIN_PERIODS && downMarket !== 0 ? (downAsset / downMarket) * 100 : null,
-  };
-}
-
 /** Daily simple returns from a price series. */
 export function dailyReturns(prices: PricePoint[]): number[] {
   return dailyReturnsWithDates(prices).map((r) => r.value);
@@ -242,10 +195,6 @@ export function computeMetrics(
   // actually bought at a discount or just paid for in full.
   const calmarRatio = dd < 0 ? annualizedReturn / Math.abs(dd) : null;
 
-  const capture = marketReturns.length > 0
-    ? captureRatios(retsWithDates, marketReturns)
-    : { up: null, down: null };
-
   // Beta: real covariance(asset, SPY) / variance(SPY), date-aligned.
   // null when no market benchmark data was supplied or overlap is too thin —
   // never a guessed/approximated number.
@@ -271,8 +220,6 @@ export function computeMetrics(
     arithmeticAnnualReturn: round2(arithmeticAnnualReturn),
     volatilityDrag: round2(volatilityDrag),
     calmarRatio: calmarRatio === null ? null : round2(calmarRatio),
-    upCapture: capture.up === null ? null : round2(capture.up),
-    downCapture: capture.down === null ? null : round2(capture.down),
     splitCount: series.splits ? series.splits.length : undefined,
     splits: series.splits,
   };
@@ -496,17 +443,30 @@ export function seriesYears(prices: PricePoint[]): number {
  * trimmed to this common window first. Returns null only when the group is
  * empty (nothing to align).
  */
+/**
+ * @param excludeFromStart Symbols to leave out of the start-date computation —
+ *   for a leveraged ETF's explicit real-only entry (symbol tagged "@real"),
+ *   whose whole point is to sit next to its own auto-simulated sibling without
+ *   dragging that sibling's start forward to its own later real inception.
+ *   The entry is still trimmed to whatever window results from the rest of
+ *   the group, and it still participates in the end-date computation.
+ */
 export function commonWindow(
-  seriesList: SymbolSeries[]
+  seriesList: SymbolSeries[],
+  excludeFromStart: Set<string> = new Set()
 ): { start: string; end: string } | null {
   const withData = seriesList.filter((s) => s.prices.length > 0);
   if (withData.length === 0) return null;
-  let start = withData[0].prices[0].date;
+  const startCandidates = withData.filter((s) => !excludeFromStart.has(s.symbol));
+  const startSource = startCandidates.length > 0 ? startCandidates : withData;
+  let start = startSource[0].prices[0].date;
+  for (const s of startSource) {
+    const first = s.prices[0].date;
+    if (first > start) start = first;
+  }
   let end = withData[0].prices[withData[0].prices.length - 1].date;
   for (const s of withData) {
-    const first = s.prices[0].date;
     const last = s.prices[s.prices.length - 1].date;
-    if (first > start) start = first;
     if (last < end) end = last;
   }
   return start <= end ? { start, end } : null;
@@ -523,7 +483,23 @@ export function trimToWindow(
 export interface IncomeProfile {
   estimatedYieldPct: number | null;
   distributionsPerYear: number | null;
+  /** Most recent distribution per unit, in the fund's own currency, and its ex-date. */
+  latestDistribution: number | null;
+  latestExDate: string | null;
+  /** Latest payout annualized (x distributionsPerYear) over the close on its ex-date. */
+  latestAnnualizedYieldPct: number | null;
+  /** Mean of the same per-payout annualized yield across the trailing year. */
+  avgAnnualizedYieldPct: number | null;
 }
+
+const NO_INCOME: IncomeProfile = {
+  estimatedYieldPct: null,
+  distributionsPerYear: null,
+  latestDistribution: null,
+  latestExDate: null,
+  latestAnnualizedYieldPct: null,
+  avgAnnualizedYieldPct: null,
+};
 
 /**
  * Trailing-twelve-month income, for judging a fund as a source of retirement
@@ -548,18 +524,35 @@ export function incomeProfile(
   dividends: DividendEvent[] | undefined
 ): IncomeProfile {
   if (!dividends || dividends.length === 0 || prices.length === 0) {
-    return { estimatedYieldPct: null, distributionsPerYear: null };
+    return NO_INCOME;
   }
   const lastDate = prices[prices.length - 1].date;
   const windowStart = new Date(Date.parse(lastDate) - MS_PER_YEAR).toISOString().slice(0, 10);
   const recent = dividends.filter((d) => d.date > windowStart && d.date <= lastDate);
-  if (recent.length === 0) return { estimatedYieldPct: null, distributionsPerYear: null };
+  if (recent.length === 0) return NO_INCOME;
 
   const paid = recent.reduce((sum, d) => sum + d.amount, 0);
   const latestClose = prices[prices.length - 1].close;
+  // Each payout annualized by the trailing payment count, over the close on
+  // (or just before) its ex-date.
+  const perYear = recent.length;
+  const annualized = recent.map((d) => {
+    let close: number | null = null;
+    for (const p of prices) {
+      if (p.date > d.date) break;
+      close = p.close;
+    }
+    return close && close > 0 ? ((d.amount * perYear) / close) * 100 : null;
+  });
+  const valid = annualized.filter((v): v is number => v !== null);
+  const latest = recent.reduce((a, b) => (b.date > a.date ? b : a));
   return {
     estimatedYieldPct: latestClose > 0 ? (paid / latestClose) * 100 : null,
-    distributionsPerYear: recent.length,
+    distributionsPerYear: perYear,
+    latestDistribution: latest.amount,
+    latestExDate: latest.date,
+    latestAnnualizedYieldPct: annualized[recent.indexOf(latest)],
+    avgAnnualizedYieldPct: valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null,
   };
 }
 

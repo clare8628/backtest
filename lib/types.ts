@@ -81,13 +81,10 @@ export interface BacktestMetrics {
    *    3x the drift, so it can still win on the compounded figure.
    *  - calmarRatio: annualized return per unit of max drawdown — whether the
    *    extra return was bought at a discount or paid for in full.
-   *  - upCapture / downCapture: % of the benchmark's average up / down move
-   *    this symbol picks up. A 3x fund sits near 300%/300%. */
+   */
   arithmeticAnnualReturn?: number;
   volatilityDrag?: number;
   calmarRatio?: number | null;
-  upCapture?: number | null;
-  downCapture?: number | null;
   /** Number of stock/ETF splits within the backtest window — undefined when
    *  the data source doesn't report split history (see SymbolSeries.splits).
    *  A low share price alone doesn't mean low returns: frequent forward
@@ -117,6 +114,13 @@ export interface BacktestMetrics {
   fundSizeUnavailableReason?: "delisting" | "noData";
   estimatedYieldPct?: number | null;
   distributionsPerYear?: number | null;
+  /** Latest payout per unit and its ex-date, plus annualized yields — see
+   *  incomeProfile(). Composition shares (income / capital gain / return of
+   *  capital) aren't in the data source, so they're not shown. */
+  latestDistribution?: number | null;
+  latestExDate?: string | null;
+  latestAnnualizedYieldPct?: number | null;
+  avgAnnualizedYieldPct?: number | null;
   /** False when managementFee is the 0% fallback rather than a published
    *  figure — the UI shows a dash instead of claiming the fund is free. */
   managementFeeKnown?: boolean;

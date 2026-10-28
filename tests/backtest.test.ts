@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, downsamplePrices, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, captureRatios, stdDev, incomeProfile, simulateWithdrawnSeries } from "@/lib/backtest";
+import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, downsamplePrices, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, stdDev, incomeProfile, simulateWithdrawnSeries } from "@/lib/backtest";
 import { parseStooqCsv, toStooqSymbol, toYahooSymbol, splitsUnreported, getKnownSplits, KNOWN_SPLITS, isTaiwanListed, symbolCandidates, lookupSymbol } from "@/lib/marketData";
 import { displaySymbol, findEntry, fundSizeIn, getAssetClass, getCreditRating, getFundSize, getFundSizeUnavailableReason, getManagementFee, hasKnownManagementFee, nativeCurrencyOf, registerDynamicSymbol, searchCatalog, SYMBOL_CATALOG } from "@/lib/symbolCatalog";
 import { formatBuildStamp, formatBuildTime } from "@/lib/version";
@@ -398,34 +398,6 @@ describe("computeMetrics annualization", () => {
   });
 });
 
-describe("captureRatios", () => {
-  // Needs at least 5 up and 5 down periods to clear captureRatios' minimum.
-  const market = [0.02, -0.01, 0.03, -0.02, 0.01, -0.03, 0.04, -0.015, 0.025, -0.005, 0.012, -0.022].map(
-    (value, i) => ({ date: `2024-02-${String(i + 1).padStart(2, "0")}`, value })
-  );
-
-  it("reports ~300%/300% for a fund that takes 3x of every move", () => {
-    const asset = market.map((r) => ({ date: r.date, value: r.value * 3 }));
-    const { up, down } = captureRatios(asset, market);
-    expect(up).toBeCloseTo(300, 6);
-    expect(down).toBeCloseTo(300, 6);
-  });
-
-  it("shows less down-capture than up-capture for a defensive holding", () => {
-    const asset = market.map((r) => ({ date: r.date, value: r.value > 0 ? r.value : r.value * 0.4 }));
-    const { up, down } = captureRatios(asset, market);
-    expect(up).toBeCloseTo(100, 6);
-    expect(down).toBeCloseTo(40, 6);
-  });
-
-  it("returns null when too few periods overlap to be meaningful", () => {
-    expect(captureRatios([{ date: "2024-01-02", value: 0.02 }], market)).toEqual({
-      up: null,
-      down: null,
-    });
-  });
-});
-
 describe("monthEndCloses", () => {
   it("takes the last close of each calendar month", () => {
     const prices: PricePoint[] = [
@@ -611,15 +583,33 @@ describe("incomeProfile", () => {
     expect(distributionsPerYear).toBe(2);
   });
 
+  it("reports latest payout and annualized yields off each ex-date close", () => {
+    const p: PricePoint[] = [
+      { date: "2026-03-01", close: 10 },
+      { date: "2026-06-01", close: 20 },
+      { date: "2026-08-31", close: 20 },
+    ];
+    const r = incomeProfile(p, [
+      { date: "2026-03-15", amount: 1 }, // 1*2/10 = 20%
+      { date: "2026-06-15", amount: 1 }, // 1*2/20 = 10%
+    ]);
+    expect(r.latestDistribution).toBe(1);
+    expect(r.latestExDate).toBe("2026-06-15");
+    expect(r.latestAnnualizedYieldPct).toBeCloseTo(10, 6);
+    expect(r.avgAnnualizedYieldPct).toBeCloseTo(15, 6);
+  });
+
   it("reports null rather than 0% when the source gives no distributions", () => {
-    expect(incomeProfile(prices, undefined)).toEqual({
+    const none = {
       estimatedYieldPct: null,
       distributionsPerYear: null,
-    });
-    expect(incomeProfile(prices, [])).toEqual({
-      estimatedYieldPct: null,
-      distributionsPerYear: null,
-    });
+      latestDistribution: null,
+      latestExDate: null,
+      latestAnnualizedYieldPct: null,
+      avgAnnualizedYieldPct: null,
+    };
+    expect(incomeProfile(prices, undefined)).toEqual(none);
+    expect(incomeProfile(prices, [])).toEqual(none);
     // A fund whose only payouts predate the window is "no data for this year",
     // not "pays nothing" — still null, never a confident zero.
     expect(incomeProfile(prices, [{ date: "2019-01-15", amount: 3 }]).estimatedYieldPct).toBeNull();

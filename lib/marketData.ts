@@ -1,6 +1,11 @@
 import { Currency, DividendEvent, PricePoint, SplitEvent, SymbolSeries } from "./types";
 import { findEntry } from "./symbolCatalog";
-import { getLeverageSpec, simulatePrefix, stripSimSuffix } from "./leverageSim";
+import {
+  getLeverageSpec,
+  parseSymbolVariant,
+  realVariantSymbol,
+  simulatePrefix,
+} from "./leverageSim";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -42,7 +47,14 @@ export async function fetchDailyPrices(
   rangeYears = 5,
   forceRefresh = false
 ): Promise<SymbolSeries> {
-  const series = await fetchRealDailyPrices(symbol, rangeYears, forceRefresh);
+  const { base, forceReal } = parseSymbolVariant(symbol);
+  const series = await fetchRealDailyPrices(base, rangeYears, forceRefresh);
+  if (forceReal) {
+    // Explicit opt-out: keep this entry real-data-only so it can be compared
+    // side by side with the same ticker's default (auto-simulated) entry —
+    // tag it back so the two stay distinct identities throughout the app.
+    return { ...series, symbol: realVariantSymbol(base) };
+  }
   return extendWithSimulation(series, rangeYears, forceRefresh);
 }
 
@@ -298,7 +310,7 @@ async function fetchFromYahoo(
  * benchmark.
  */
 export function isTaiwanListed(symbol: string): boolean {
-  const s = symbol.trim().toUpperCase();
+  const s = parseSymbolVariant(symbol).base.trim().toUpperCase();
   return s.endsWith(".TW") || s.endsWith(".TWO");
 }
 
@@ -556,7 +568,7 @@ async function lookupTaiwanOpenApi(rawSymbol: string): Promise<SymbolLookupResul
  * Returns metadata including canonical symbol, name, currency, latest price, and channel used.
  */
 export async function lookupSymbol(rawSymbol: string): Promise<SymbolLookupResult> {
-  const s = stripSimSuffix(rawSymbol).trim().toUpperCase();
+  const s = parseSymbolVariant(rawSymbol).base.trim().toUpperCase();
   const channelsTried: string[] = [];
 
   if (!s) {

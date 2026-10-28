@@ -1,4 +1,4 @@
-import { SIM_SUFFIX } from "./leverageSim";
+import { parseSymbolVariant, REAL_SUFFIX, SIM_SUFFIX } from "./leverageSim";
 import { Currency } from "./types";
 
 export interface CatalogEntry {
@@ -357,7 +357,11 @@ export function registerDynamicSymbol(entry: CatalogEntry) {
 }
 
 export function findEntry(symbol: string): CatalogEntry | undefined {
-  const key = symbol.trim().toUpperCase();
+  // Accepts a symbol carrying an explicit "@real" (or stray "@sim") suffix,
+  // so every catalog-driven lookup (fees, asset class, fund size, ...) works
+  // the same for a leveraged ETF's real-only comparison entry as for its
+  // default one.
+  const key = parseSymbolVariant(symbol).base.trim().toUpperCase();
   return (
     DYNAMIC_CATALOG.get(key) ||
     DYNAMIC_CATALOG.get(`${key}.TW`) ||
@@ -407,7 +411,7 @@ const TW_SUFFIX = /\.(TW|TWO)$/i;
 /** The market a symbol actually trades in, hence the currency its price and
  *  net assets are quoted in. */
 export function nativeCurrencyOf(symbol: string): Currency {
-  return TW_SUFFIX.test(symbol.trim()) ? "TWD" : "USD";
+  return TW_SUFFIX.test(parseSymbolVariant(symbol).base.trim()) ? "TWD" : "USD";
 }
 
 /**
@@ -436,8 +440,14 @@ export function symbolLabel(
   lang: "zh" | "en" = "zh",
   simulated = false
 ): { code: string; name?: string } {
-  const trimmed = symbol.trim();
-  const tag = simulated ? SIM_SUFFIX : "";
+  // A symbol may itself carry an explicit "@real" suffix (the un-simulated
+  // counterpart of a leveraged ETF, stored verbatim so it can coexist with
+  // the symbol's default entry) — strip it to resolve the actual ticker,
+  // then re-apply the right tag so Taiwan name lookup and formatting still
+  // work on the clean ticker underneath.
+  const { base, forceReal } = parseSymbolVariant(symbol);
+  const trimmed = base.trim();
+  const tag = forceReal ? REAL_SUFFIX : simulated ? SIM_SUFFIX : "";
   if (!TW_SUFFIX.test(trimmed)) return { code: trimmed + tag };
   const entry = findEntry(trimmed);
   if (!entry) return { code: trimmed + tag };
