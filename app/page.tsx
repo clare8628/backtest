@@ -3,7 +3,7 @@
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { t, Lang } from "@/lib/i18n";
 import { displaySymbol, findEntry, registerDynamicSymbol, searchCatalog, symbolLabel } from "@/lib/symbolCatalog";
-import { getLeverageSpec, parseSymbolVariant, realVariantSymbol, stripSimSuffix } from "@/lib/leverageSim";
+import { getLeverageSpec, parseSymbolVariant, realVariantSymbol, REAL_SUFFIX } from "@/lib/leverageSim";
 import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries, Currency } from "@/lib/types";
 import { loadGroups, upsertGroup, reorderGroups, deleteGroup, newGroupId } from "@/lib/storage";
 import PerformanceChart, { SimSettings } from "@/components/PerformanceChart";
@@ -39,6 +39,20 @@ const MAX_SYMBOLS_PER_GROUP = 15;
 function addSymbolKey(canonical: string, forceReal: boolean): string {
   const spec = getLeverageSpec(canonical) ?? getLeverageSpec(`${canonical}.TW`);
   return forceReal && spec ? realVariantSymbol(canonical) : canonical;
+}
+
+/** The alert shown when an add-symbol input resolves to something already in
+ *  the group: a dedicated message when it's the "@real" entry itself, or the
+ *  usual duplicate notice — with a hint about "@real" appended when the
+ *  symbol actually has a leveraged-ETF simulation spec to compare against. */
+function duplicateSymbolMessage(T: Record<string, string>, resolvedKey: string, baseSymbol: string): string {
+  if (resolvedKey.toUpperCase().endsWith(REAL_SUFFIX.toUpperCase())) {
+    return T.symbolRealVariantAlreadyInGroup.replace("{symbol}", baseSymbol);
+  }
+  const spec = getLeverageSpec(baseSymbol) ?? getLeverageSpec(`${baseSymbol}.TW`);
+  let msg = T.symbolAlreadyInGroup.replace("{symbol}", resolvedKey);
+  if (spec) msg += " " + T.addRealVariantHint.replace("{symbol}", resolvedKey);
+  return msg;
 }
 
 /** Blue above `neutral`, red below — used for the signed trend measures, where
@@ -478,7 +492,7 @@ export default function Home() {
     const hadSuffix = s !== sym.trim().toUpperCase();
     const earlyKey = addSymbolKey(s, forceReal);
     if (draftSymbols.includes(earlyKey)) {
-      if (hadSuffix) alert(T.symbolAlreadyInGroup.replace("{symbol}", earlyKey));
+      if (hadSuffix) alert(duplicateSymbolMessage(T, earlyKey, s));
       return;
     }
     if (draftSymbols.length >= MAX_SYMBOLS_PER_GROUP) {
@@ -496,7 +510,7 @@ export default function Home() {
       if (!draftSymbols.includes(key)) {
         setDraftSymbols([...draftSymbols, key]);
       } else if (hadSuffix) {
-        alert(T.symbolAlreadyInGroup.replace("{symbol}", key));
+        alert(duplicateSymbolMessage(T, key, s));
       }
       setQuery("");
       return;
@@ -524,7 +538,7 @@ export default function Home() {
         if (!draftSymbols.includes(key)) {
           setDraftSymbols([...draftSymbols, key]);
         } else if (hadSuffix) {
-          alert(T.symbolAlreadyInGroup.replace("{symbol}", key));
+          alert(duplicateSymbolMessage(T, key, s));
         }
         setQuery("");
       } else {
@@ -629,7 +643,15 @@ export default function Home() {
    * For a brand-new group (!rangeFitted), it snaps directly to this ceiling.
    */
   function maybeAutoFitRange(group: ComparisonGroup, data: BacktestResult) {
-    const ceilings = (data.metrics ?? [])
+    // A symbol's explicit "@real" entry always has less history than its
+    // auto-simulated sibling by design — it must not drag the range down to
+    // its own real inception, or the simulated stretch it's being compared
+    // against would never be long enough to show.
+    const nonRealOnlyMetrics = (data.metrics ?? []).filter(
+      (m) => !parseSymbolVariant(m.symbol).forceReal
+    );
+    const ceilingSource = nonRealOnlyMetrics.length > 0 ? nonRealOnlyMetrics : data.metrics ?? [];
+    const ceilings = ceilingSource
       .map((m) => m.maxBacktestYears)
       .filter((y): y is number => typeof y === "number" && y > 0);
     if (ceilings.length === 0) return; // every symbol errored — try again next run
@@ -711,12 +733,13 @@ export default function Home() {
   }
 
   async function addSymbolToGroup(group: ComparisonGroup, sym: string) {
-    const s = stripSimSuffix(sym).trim().toUpperCase();
+    const { base, forceReal } = parseSymbolVariant(sym);
+    const s = base.trim().toUpperCase();
     if (!s) return;
-    if (group.symbols.includes(s)) {
-      if (s !== sym.trim().toUpperCase()) {
-        alert(T.symbolAlreadyInGroup.replace("{symbol}", s));
-      }
+    const hadSuffix = s !== sym.trim().toUpperCase();
+    const earlyKey = addSymbolKey(s, forceReal);
+    if (group.symbols.includes(earlyKey)) {
+      if (hadSuffix) alert(duplicateSymbolMessage(T, earlyKey, s));
       return;
     }
     if (group.symbols.length >= MAX_SYMBOLS_PER_GROUP) {
@@ -729,9 +752,12 @@ export default function Home() {
     const known = findEntry(s);
     if (known) {
       const canonical = known.symbol.toUpperCase();
-      if (!group.symbols.includes(canonical)) {
-        const updated = { ...group, symbols: [...group.symbols, canonical], rangeFitted: false };
+      const key = addSymbolKey(canonical, forceReal);
+      if (!group.symbols.includes(key)) {
+        const updated = { ...group, symbols: [...group.symbols, key], rangeFitted: false };
         updateGroup(updated, { rerun: true });
+      } else if (hadSuffix) {
+        alert(duplicateSymbolMessage(T, key, s));
       }
       setEditQuery("");
       return;
@@ -754,9 +780,12 @@ export default function Home() {
           category: data.category || "Stock",
         });
         const canonical = data.canonicalSymbol.toUpperCase();
-        if (!group.symbols.includes(canonical)) {
-          const updated = { ...group, symbols: [...group.symbols, canonical], rangeFitted: false };
+        const key = addSymbolKey(canonical, forceReal);
+        if (!group.symbols.includes(key)) {
+          const updated = { ...group, symbols: [...group.symbols, key], rangeFitted: false };
           updateGroup(updated, { rerun: true });
+        } else if (hadSuffix) {
+          alert(duplicateSymbolMessage(T, key, s));
         }
         setEditQuery("");
       } else {

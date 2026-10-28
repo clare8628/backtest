@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, downsamplePrices, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, stdDev, incomeProfile, simulateWithdrawnSeries } from "@/lib/backtest";
+import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, downsamplePrices, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, stdDev, incomeProfile, simulateWithdrawnSeries, commonWindow } from "@/lib/backtest";
 import { parseStooqCsv, toStooqSymbol, toYahooSymbol, splitsUnreported, getKnownSplits, KNOWN_SPLITS, isTaiwanListed, symbolCandidates, lookupSymbol } from "@/lib/marketData";
 import { displaySymbol, findEntry, fundSizeIn, getAssetClass, getCreditRating, getFundSize, getFundSizeUnavailableReason, getManagementFee, hasKnownManagementFee, nativeCurrencyOf, registerDynamicSymbol, searchCatalog, SYMBOL_CATALOG } from "@/lib/symbolCatalog";
 import { formatBuildStamp, formatBuildTime } from "@/lib/version";
@@ -1093,6 +1093,56 @@ describe("catalog expense ratio completeness [BAC-11]", () => {
     });
     expect(hasKnownManagementFee("TEST_STOCK_2330")).toBe(true);
     expect(getManagementFee("TEST_STOCK_2330")).toBe(0);
+  });
+});
+
+describe("commonWindow", () => {
+  const sim: SymbolSeries = {
+    symbol: "TQQQ",
+    prices: [
+      { date: "1999-03-11", close: 10 },
+      { date: "2026-01-01", close: 500 },
+    ],
+  };
+  const real: SymbolSeries = {
+    symbol: "TQQQ@real",
+    prices: [
+      { date: "2010-02-12", close: 1 },
+      { date: "2026-01-01", close: 90 },
+    ],
+  };
+
+  it("pegs the start to the latest-starting series by default", () => {
+    expect(commonWindow([sim, real])).toEqual({ start: "2010-02-12", end: "2026-01-01" });
+  });
+
+  it("ignores an excluded series' start, so a real-only entry doesn't clip its simulated sibling", () => {
+    expect(commonWindow([sim, real], new Set(["TQQQ@real"]))).toEqual({
+      start: "1999-03-11",
+      end: "2026-01-01",
+    });
+  });
+
+  it("still uses the excluded series for the end date", () => {
+    const shortEnd: SymbolSeries = { ...real, prices: [real.prices[0], { date: "2020-01-01", close: 5 }] };
+    expect(commonWindow([sim, shortEnd], new Set(["TQQQ@real"]))).toEqual({
+      start: "1999-03-11",
+      end: "2020-01-01",
+    });
+  });
+
+  it("falls back to every series when all of them are excluded", () => {
+    expect(commonWindow([real], new Set(["TQQQ@real"]))).toEqual({
+      start: "2010-02-12",
+      end: "2026-01-01",
+    });
+  });
+});
+
+describe("catalog lookups with an @real-tagged symbol", () => {
+  it("resolve the same as the plain ticker", () => {
+    expect(nativeCurrencyOf("00687B.TWO@real")).toBe("TWD");
+    expect(findEntry("VGLT@real")?.symbol).toBe("VGLT");
   });
 });
 
