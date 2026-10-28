@@ -449,7 +449,13 @@ export default function Home() {
 
   async function addSymbol(sym: string) {
     const s = stripSimSuffix(sym).trim().toUpperCase();
-    if (!s || draftSymbols.includes(s)) return;
+    if (!s) return;
+    if (draftSymbols.includes(s)) {
+      if (s !== sym.trim().toUpperCase()) {
+        alert(T.symbolAlreadyInGroup.replace("{symbol}", s));
+      }
+      return;
+    }
     if (draftSymbols.length >= MAX_SYMBOLS_PER_GROUP) {
       alert(T.maxSymbolsReached);
       return;
@@ -675,7 +681,13 @@ export default function Home() {
 
   async function addSymbolToGroup(group: ComparisonGroup, sym: string) {
     const s = stripSimSuffix(sym).trim().toUpperCase();
-    if (!s || group.symbols.includes(s)) return;
+    if (!s) return;
+    if (group.symbols.includes(s)) {
+      if (s !== sym.trim().toUpperCase()) {
+        alert(T.symbolAlreadyInGroup.replace("{symbol}", s));
+      }
+      return;
+    }
     if (group.symbols.length >= MAX_SYMBOLS_PER_GROUP) {
       alert(T.maxSymbolsReached);
       return;

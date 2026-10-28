@@ -58,6 +58,8 @@ export const dict = {
     dragToReorder: "拖曳以調整順序",
     addSymbolToGroup: "搜尋加入標的",
     maxSymbolsReached: "已達單組標的上限（最多 15 檔）",
+    symbolAlreadyInGroup:
+      "{symbol} 已在此比較組中。槓桿 ETF 成立前的走勢會在回測期間足夠長時自動以模擬數據延伸補上，並於圖例標示 @sim，不需另外加入。",
     performanceChart: "走勢圖",
     chartInteractionTip: "💡 提示：懸停下方圖例或走勢線可聚焦特定標的；滑鼠靠近歷史時間點會自動感應重大歷史事件。",
     cumulativeReturn: "累積報酬",
@@ -200,6 +202,8 @@ export const dict = {
     dragToReorder: "Drag to reorder",
     addSymbolToGroup: "Search to add a symbol",
     maxSymbolsReached: "Maximum limit reached (up to 15 symbols)",
+    symbolAlreadyInGroup:
+      "{symbol} is already in this comparison. Pre-inception history for leveraged ETFs is simulated automatically once the backtest range is long enough, shown as @sim in the legend — no need to add it separately.",
     performanceChart: "Chart",
     chartInteractionTip: "💡 Tip: Hover over the legend or lines to focus a symbol. Hover near historical dates to view major crises.",
     cumulativeReturn: "Cumulative Return",
