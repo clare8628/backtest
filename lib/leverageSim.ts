@@ -18,6 +18,19 @@ export interface LeverageSpec {
 
 export const SIM_SUFFIX = "@sim";
 
+/**
+ * Users may type the displayed "@sim" suffix back into a symbol search box
+ * (e.g. copying "TQQQ@sim" from the legend). The suffix is a display-only
+ * label, not part of any real ticker, so strip it before any lookup.
+ */
+export function stripSimSuffix(symbol: string): string {
+  const s = symbol.trim();
+  if (s.toUpperCase().endsWith(SIM_SUFFIX.toUpperCase())) {
+    return s.slice(0, s.length - SIM_SUFFIX.length).trim();
+  }
+  return s;
+}
+
 const SIM_SPECS: Record<string, LeverageSpec> = {
   TQQQ: { underlying: "QQQ", leverage: 3, expenseRatio: 0.86, financingRate: 3 },
   QLD: { underlying: "QQQ", leverage: 2, expenseRatio: 0.95, financingRate: 3 },

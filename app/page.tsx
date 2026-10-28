@@ -3,6 +3,7 @@
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { t, Lang } from "@/lib/i18n";
 import { displaySymbol, findEntry, registerDynamicSymbol, searchCatalog, symbolLabel } from "@/lib/symbolCatalog";
+import { stripSimSuffix } from "@/lib/leverageSim";
 import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries, Currency } from "@/lib/types";
 import { loadGroups, upsertGroup, reorderGroups, deleteGroup, newGroupId } from "@/lib/storage";
 import PerformanceChart, { SimSettings } from "@/components/PerformanceChart";
@@ -447,7 +448,7 @@ export default function Home() {
   const [refreshSuccessGroupId, setRefreshSuccessGroupId] = useState<string | null>(null);
 
   async function addSymbol(sym: string) {
-    const s = sym.trim().toUpperCase();
+    const s = stripSimSuffix(sym).trim().toUpperCase();
     if (!s || draftSymbols.includes(s)) return;
     if (draftSymbols.length >= MAX_SYMBOLS_PER_GROUP) {
       alert(T.maxSymbolsReached);
@@ -673,7 +674,7 @@ export default function Home() {
   }
 
   async function addSymbolToGroup(group: ComparisonGroup, sym: string) {
-    const s = sym.trim().toUpperCase();
+    const s = stripSimSuffix(sym).trim().toUpperCase();
     if (!s || group.symbols.includes(s)) return;
     if (group.symbols.length >= MAX_SYMBOLS_PER_GROUP) {
       alert(T.maxSymbolsReached);

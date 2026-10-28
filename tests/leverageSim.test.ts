@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getLeverageSpec, simulatePrefix } from "@/lib/leverageSim";
+import { getLeverageSpec, simulatePrefix, stripSimSuffix } from "@/lib/leverageSim";
 import { symbolLabel } from "@/lib/symbolCatalog";
 
 const spec = { underlying: "QQQ", leverage: 3, expenseRatio: 0, financingRate: 0 };
@@ -49,5 +49,18 @@ describe("leverage specs & labels", () => {
     expect(symbolLabel("TQQQ", "zh", true).code).toBe("TQQQ@sim");
     expect(symbolLabel("00631L.TW", "zh", true).code).toBe("00631L@sim");
     expect(symbolLabel("TQQQ").code).toBe("TQQQ");
+  });
+});
+
+describe("stripSimSuffix", () => {
+  it("strips a trailing @sim suffix typed by the user, case-insensitively", () => {
+    expect(stripSimSuffix("TQQQ@sim")).toBe("TQQQ");
+    expect(stripSimSuffix("TQQQ@SIM")).toBe("TQQQ");
+    expect(stripSimSuffix(" tqqq@Sim ")).toBe("tqqq");
+  });
+
+  it("leaves symbols without the suffix untouched", () => {
+    expect(stripSimSuffix("TQQQ")).toBe("TQQQ");
+    expect(stripSimSuffix("00631L.TW")).toBe("00631L.TW");
   });
 });

@@ -1,6 +1,6 @@
 import { Currency, DividendEvent, PricePoint, SplitEvent, SymbolSeries } from "./types";
 import { findEntry } from "./symbolCatalog";
-import { getLeverageSpec, simulatePrefix } from "./leverageSim";
+import { getLeverageSpec, simulatePrefix, stripSimSuffix } from "./leverageSim";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -556,7 +556,7 @@ async function lookupTaiwanOpenApi(rawSymbol: string): Promise<SymbolLookupResul
  * Returns metadata including canonical symbol, name, currency, latest price, and channel used.
  */
 export async function lookupSymbol(rawSymbol: string): Promise<SymbolLookupResult> {
-  const s = rawSymbol.trim().toUpperCase();
+  const s = stripSimSuffix(rawSymbol).trim().toUpperCase();
   const channelsTried: string[] = [];
 
   if (!s) {
