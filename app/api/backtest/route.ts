@@ -50,6 +50,12 @@ function benchmarkFor(symbol: string): string {
   return isTaiwanListed(symbol) ? TW_MARKET_BENCHMARK_SYMBOL : US_MARKET_BENCHMARK_SYMBOL;
 }
 
+// Simulated prices only count if the compared window actually reaches them —
+// aligning to a shorter peer can trim the simulated stretch away entirely.
+function usesSimulation(s: { prices: { date: string }[]; simulatedUntil?: string }): boolean {
+  return !!s.simulatedUntil && s.prices.length > 0 && s.prices[0].date < s.simulatedUntil;
+}
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -183,6 +189,7 @@ export async function POST(req: NextRequest) {
       return {
         ...m,
         benchmarkSymbol,
+        simulated: usesSimulation(s),
         maxBacktestYears: round2(maxBacktestYears[s.symbol] ?? 0),
         trendR2: trend.trendR2 === null ? null : round2(trend.trendR2),
         newHighMonthPct: trend.newHighMonthPct === null ? null : round2(trend.newHighMonthPct),
@@ -220,7 +227,7 @@ export async function POST(req: NextRequest) {
         const priceTWD = currency === "TWD" ? p.close : rate !== null ? round2(p.close * rate) : null;
         return { date: p.date, priceUSD, priceTWD };
       });
-      return { symbol: s.symbol, currency, points, splits: windowSplits };
+      return { symbol: s.symbol, currency, points, simulated: usesSimulation(s), splits: windowSplits };
     });
 
     return NextResponse.json({

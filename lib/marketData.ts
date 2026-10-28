@@ -1,5 +1,6 @@
 import { Currency, DividendEvent, PricePoint, SplitEvent, SymbolSeries } from "./types";
 import { findEntry } from "./symbolCatalog";
+import { getLeverageSpec, simulatePrefix } from "./leverageSim";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -37,6 +38,38 @@ interface YahooMeta {
  *  - Backup B: Stooq CSV endpoint
  */
 export async function fetchDailyPrices(
+  symbol: string,
+  rangeYears = 5,
+  forceRefresh = false
+): Promise<SymbolSeries> {
+  const series = await fetchRealDailyPrices(symbol, rangeYears, forceRefresh);
+  return extendWithSimulation(series, rangeYears, forceRefresh);
+}
+
+/**
+ * A leveraged ETF younger than the requested range gets its missing earlier
+ * stretch simulated from the underlying ETF. Any failure to get the underlying
+ * falls back to the real series untouched.
+ */
+async function extendWithSimulation(
+  series: SymbolSeries,
+  rangeYears: number,
+  forceRefresh: boolean
+): Promise<SymbolSeries> {
+  const spec = getLeverageSpec(series.symbol);
+  if (!spec || series.prices.length === 0) return series;
+  try {
+    const underlying = await fetchRealDailyPrices(spec.underlying, rangeYears, forceRefresh);
+    const first = series.prices[0];
+    const prefix = simulatePrefix(first, underlying.prices, spec);
+    if (prefix.length === 0) return series;
+    return { ...series, prices: [...prefix, ...series.prices], simulatedUntil: first.date };
+  } catch {
+    return series;
+  }
+}
+
+async function fetchRealDailyPrices(
   symbol: string,
   rangeYears = 5,
   forceRefresh = false
@@ -112,9 +145,14 @@ async function fetchFromYahoo(
 ): Promise<SymbolSeries> {
   const host = hostIndex === 0 ? "query1.finance.yahoo.com" : "query2.finance.yahoo.com";
   const range = yearsToYahooRange(rangeYears);
+  // range=max makes Yahoo return monthly bars; an explicit window keeps daily.
+  const span =
+    range === "max"
+      ? `period1=0&period2=${Math.floor(Date.now() / 1000) + 86400}`
+      : `range=${range}`;
   const url = `https://${host}/v8/finance/chart/${encodeURIComponent(
     toYahooSymbol(symbol)
-  )}?range=${range}&interval=1d&events=div%2Csplit`;
+  )}?${span}&interval=1d&events=div%2Csplit`;
 
   const res = await fetch(url, {
     headers: {

@@ -35,10 +35,15 @@ export interface SymbolSeries {
   /** Cash distributions within the fetched range, from the source's dividend
    *  events — undefined when the source doesn't report them at all. */
   dividends?: DividendEvent[];
+  /** Date the real series starts, set when the stretch before it was simulated
+   *  from the underlying ETF (see leverageSim.ts); undefined when all real. */
+  simulatedUntil?: string;
 }
 
 export interface BacktestMetrics {
   symbol: string;
+  /** True when the compared window includes simulated (@sim) prices. */
+  simulated?: boolean;
   totalReturn: number; // %
   annualizedReturn: number; // %
   annualizedVolatility: number; // %
@@ -169,6 +174,8 @@ export interface ChartSeries {
   symbol: string;
   currency: Currency; // the symbol's native trading currency
   points: ChartPoint[];
+  /** True when the plotted window includes simulated (@sim) prices. */
+  simulated?: boolean;
   /** Stock/ETF split events within the chart range */
   splits?: SplitEvent[];
 }

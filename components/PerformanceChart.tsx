@@ -22,8 +22,8 @@ export const SERIES_COLORS = [
  * A series' label under the chart: ticker on top, fund name centred beneath,
  * matching how the metrics table labels its columns.
  */
-function LegendLabel({ symbol, lang }: { symbol: string; lang: Lang }) {
-  const { code, name } = symbolLabel(symbol, lang);
+function LegendLabel({ symbol, lang, simulated }: { symbol: string; lang: Lang; simulated?: boolean }) {
+  const { code, name } = symbolLabel(symbol, lang, simulated);
   if (!name) return <span className="font-semibold">{code}</span>;
   return (
     <span className="inline-flex flex-col items-start leading-tight">
@@ -187,6 +187,8 @@ export default function PerformanceChart({
       if (updates.inflationRate !== undefined) setLocalInflationRate(updates.inflationRate);
     }
   }
+
+  const isSim = (symbol: string) => series.some((s) => s.symbol === symbol && s.simulated);
 
   const plotted = useMemo(() => {
     const raw = series
@@ -414,7 +416,7 @@ export default function PerformanceChart({
   // 懸浮資訊文字列
   const tooltipDataRows = (hoverPoints ?? []).map((h, sIdx) => {
     const color = SERIES_COLORS[sIdx % SERIES_COLORS.length];
-    const { code, name } = symbolLabel(h.symbol, lang);
+    const { code, name } = symbolLabel(h.symbol, lang, isSim(h.symbol));
     const firstVal = plotted[sIdx]?.points[0]?.value || 1;
     const currentVal = h.point?.value ?? 0;
     const returnPct = ((currentVal - firstVal) / firstVal) * 100;
@@ -965,7 +967,7 @@ export default function PerformanceChart({
             const isDimmed = hoveredSymbol !== null && !isHovered;
             const labelX = xFor(lastPt.t) + 6;
             const labelY = yFor(lastPt.value);
-            const { code } = symbolLabel(s.symbol, lang);
+            const { code } = symbolLabel(s.symbol, lang, isSim(s.symbol));
 
             const firstVal = s.points[0]?.value || 1;
             const retPct = ((lastPt.value - firstVal) / firstVal) * 100;
@@ -1334,7 +1336,7 @@ export default function PerformanceChart({
                   transform: isHovered ? "scale(1.2)" : "scale(1)",
                 }}
               />
-              <LegendLabel symbol={s.symbol} lang={lang} />
+              <LegendLabel symbol={s.symbol} lang={lang} simulated={isSim(s.symbol)} />
             </button>
           );
         })}

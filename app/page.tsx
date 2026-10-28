@@ -72,8 +72,8 @@ function Note({ title, body }: { title: string; body: string }) {
  * longer line and the code stays the first thing read. US tickers have no
  * name and render as the single line they already were.
  */
-function SymbolLabel({ symbol, lang }: { symbol: string; lang: Lang }) {
-  const { code, name } = symbolLabel(symbol, lang);
+function SymbolLabel({ symbol, lang, simulated }: { symbol: string; lang: Lang; simulated?: boolean }) {
+  const { code, name } = symbolLabel(symbol, lang, simulated);
   if (!name) return <>{code}</>;
   return (
     <span className="inline-flex flex-col items-center leading-tight">
@@ -327,7 +327,7 @@ function MetricsTable({
           <th className="py-2 pr-4 text-left font-normal text-xs whitespace-nowrap">{T.metric}</th>
           {sortedMetrics.map((m) => (
             <th key={m.symbol} className="py-2 px-2 text-right font-medium" style={{ color: "var(--foreground)" }}>
-              <SymbolLabel symbol={m.symbol} lang={lang} />
+              <SymbolLabel symbol={m.symbol} lang={lang} simulated={m.simulated} />
             </th>
           ))}
         </tr>
@@ -1150,7 +1150,7 @@ export default function Home() {
                     <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
                       {T.leads}
                       <span className="font-semibold" style={{ color: "var(--foreground)" }}>
-                        {displaySymbol(topMetric.symbol, lang)}
+                        {displaySymbol(topMetric.symbol, lang, topMetric.simulated)}
                       </span>
                       {" · "}
                       <span
@@ -1527,7 +1527,7 @@ export default function Home() {
                                   {r.rank}
                                 </span>
                                 <span className="font-semibold">
-                                  <SymbolLabel symbol={r.symbol} lang={lang} />
+                                  <SymbolLabel symbol={r.symbol} lang={lang} simulated={result?.metrics.find((m) => m.symbol === r.symbol)?.simulated} />
                                 </span>
                               </div>
                               <span className="text-xs opacity-60 sm:w-24 shrink-0">

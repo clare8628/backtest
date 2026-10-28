@@ -1,3 +1,4 @@
+import { SIM_SUFFIX } from "./leverageSim";
 import { Currency } from "./types";
 
 export interface CatalogEntry {
@@ -432,22 +433,28 @@ export function nativeCurrencyOf(symbol: string): Currency {
  */
 export function symbolLabel(
   symbol: string,
-  lang: "zh" | "en" = "zh"
+  lang: "zh" | "en" = "zh",
+  simulated = false
 ): { code: string; name?: string } {
   const trimmed = symbol.trim();
-  if (!TW_SUFFIX.test(trimmed)) return { code: trimmed };
+  const tag = simulated ? SIM_SUFFIX : "";
+  if (!TW_SUFFIX.test(trimmed)) return { code: trimmed + tag };
   const entry = findEntry(trimmed);
-  if (!entry) return { code: trimmed };
+  if (!entry) return { code: trimmed + tag };
   return {
-    code: trimmed.replace(TW_SUFFIX, ""),
+    code: trimmed.replace(TW_SUFFIX, "") + tag,
     name: lang === "en" ? entry.nameEn : entry.name,
   };
 }
 
 /** symbolLabel as a single string — "00687B(國泰20年美債)" — for the places a
  *  symbol appears mid-sentence and cannot be stacked. */
-export function displaySymbol(symbol: string, lang: "zh" | "en" = "zh"): string {
-  const { code, name } = symbolLabel(symbol, lang);
+export function displaySymbol(
+  symbol: string,
+  lang: "zh" | "en" = "zh",
+  simulated = false
+): string {
+  const { code, name } = symbolLabel(symbol, lang, simulated);
   return name ? `${code}(${name})` : code;
 }
 
