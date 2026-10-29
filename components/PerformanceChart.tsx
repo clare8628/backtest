@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { ChartSeries, Currency } from "@/lib/types";
 import { Lang, t } from "@/lib/i18n";
 import { symbolLabel } from "@/lib/symbolCatalog";
+import { isSimulatedSymbol, stripSimSuffix } from "@/lib/leverageSim";
 import { simulateWithdrawnSeries } from "@/lib/backtest";
 
 // 現代金融精緻高對比調色盤（兼顧高辨識度、色盲友善與 Equals 品牌質感）
@@ -305,6 +306,12 @@ export default function PerformanceChart({
 
   function nearestPoint(points: PlottedPoint[], t: number): PlottedPoint | null {
     if (points.length === 0) return null;
+    const firstT = points[0].t;
+    const lastT = points[points.length - 1].t;
+    const avgStep = points.length > 1 ? (lastT - firstT) / (points.length - 1) : 86400000;
+    const margin = Math.max(86400000 * 7, avgStep * 0.75);
+    if (t < firstT - margin || t > lastT + margin) return null;
+
     let best = points[0];
     let bestDist = Math.abs(points[0].t - t);
     for (const p of points) {
@@ -339,7 +346,24 @@ export default function PerformanceChart({
         }
       }
     });
-    return list.sort((a, b) => a.t - b.t);
+
+    // 若同一檔標的同時存在真實與模擬版本，避免在相同分割日期重複標記
+    const seen = new Set<string>();
+    const deduped: VisibleSplit[] = [];
+    const sorted = [...list].sort((a, b) => {
+      const aSim = isSimulatedSymbol(a.symbol) ? 1 : 0;
+      const bSim = isSimulatedSymbol(b.symbol) ? 1 : 0;
+      return aSim - bSim;
+    });
+    for (const item of sorted) {
+      const key = `${stripSimSuffix(item.symbol).toUpperCase()}-${item.date}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push(item);
+      }
+    }
+
+    return deduped.sort((a, b) => a.t - b.t);
   }, [plotted, tMin, tMax]);
 
   const hoverPoints =
@@ -418,9 +442,10 @@ export default function PerformanceChart({
     const color = SERIES_COLORS[sIdx % SERIES_COLORS.length];
     const { code, name } = symbolLabel(h.symbol, lang, isSim(h.symbol));
     const firstVal = plotted[sIdx]?.points[0]?.value || 1;
+    const hasPoint = h.point !== null;
     const currentVal = h.point?.value ?? 0;
-    const returnPct = ((currentVal - firstVal) / firstVal) * 100;
-    const pctStr = `${returnPct >= 0 ? "+" : ""}${returnPct.toFixed(1)}%`;
+    const returnPct = hasPoint ? ((currentVal - firstVal) / firstVal) * 100 : null;
+    const pctStr = returnPct !== null ? `${returnPct >= 0 ? "+" : ""}${returnPct.toFixed(1)}%` : "—";
 
     return {
       symbol: h.symbol,
@@ -1281,7 +1306,7 @@ export default function PerformanceChart({
                       y={startY}
                       fontSize={9}
                       fontWeight={600}
-                      fill={row.returnPct >= 0 ? "var(--positive)" : "var(--negative)"}
+                      fill={row.returnPct === null ? "var(--foreground-muted)" : row.returnPct >= 0 ? "var(--positive)" : "var(--negative)"}
                       textAnchor="end"
                     >
                       {row.pctStr}

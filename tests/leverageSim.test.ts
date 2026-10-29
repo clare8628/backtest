@@ -3,6 +3,7 @@ import {
   getLeverageSpec,
   isSimulatedSymbol,
   parseSymbolVariant,
+  simVariantSymbol,
   simulatePrefix,
   stripSimSuffix,
 } from "@/lib/leverageSim";
@@ -77,6 +78,16 @@ describe("isSimulatedSymbol & parseSymbolVariant", () => {
     expect(parseSymbolVariant("TQQQ@sim")).toEqual({ base: "TQQQ", isSim: true });
     expect(parseSymbolVariant("TQQQ")).toEqual({ base: "TQQQ", isSim: false });
     expect(parseSymbolVariant("00631L.TW@sim")).toEqual({ base: "00631L.TW", isSim: true });
+  });
+});
+
+describe("simVariantSymbol", () => {
+  it("formats base symbol with canonical @sim suffix", () => {
+    expect(simVariantSymbol("TQQQ")).toBe("TQQQ@sim");
+    expect(simVariantSymbol("tqqq")).toBe("TQQQ@sim");
+    expect(simVariantSymbol("TQQQ@sim")).toBe("TQQQ@sim");
+    expect(simVariantSymbol("TQQQ@SIM")).toBe("TQQQ@sim");
+    expect(simVariantSymbol("00631L.TW")).toBe("00631L.TW@sim");
   });
 });
 

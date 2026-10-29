@@ -1,6 +1,6 @@
 import { Currency, DividendEvent, PricePoint, SplitEvent, SymbolSeries } from "./types";
 import { findEntry } from "./symbolCatalog";
-import { getLeverageSpec, isSimulatedSymbol, simulatePrefix, stripSimSuffix } from "./leverageSim";
+import { getLeverageSpec, isSimulatedSymbol, simVariantSymbol, simulatePrefix, stripSimSuffix } from "./leverageSim";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -45,7 +45,7 @@ export async function fetchDailyPrices(
   const isSim = isSimulatedSymbol(symbol);
   const base = stripSimSuffix(symbol);
   const series = await fetchRealDailyPrices(base, rangeYears, forceRefresh);
-  const canonicalSym = symbol.trim().toUpperCase();
+  const canonicalSym = isSim ? simVariantSymbol(base) : base.trim().toUpperCase();
   if (!isSim) {
     return { ...series, symbol: canonicalSym };
   }
