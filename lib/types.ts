@@ -59,6 +59,8 @@ export interface BacktestMetrics {
    *  listing date to today), independent of the currently selected range —
    *  a fund listed 2 years ago tops out at ~2 years regardless of the slider. */
   maxBacktestYears?: number;
+  /** Earliest available trade date for this symbol (from inception / first recorded trade). */
+  firstDate?: string;
   /** Direction-of-trend measures. All threshold-free — nothing here has a knob
    *  to tune. See trendStrength() in backtest.ts for the full definitions.
    *  - trendR2: R² (0–100) of ln(price) regressed on time, signed by slope —
@@ -140,6 +142,10 @@ export interface ComparisonGroup {
   symbols: string[];
   createdAt: string;
   rangeYears: number;
+  /** Explicit start year for backtest interval */
+  startYear?: number;
+  /** Explicit end year for backtest interval */
+  endYear?: number;
   startValue?: number; // 起點金額，預設 100
   /**
    * Whether `rangeYears` is a settled choice rather than the untouched default.

@@ -421,6 +421,9 @@ export default function Home() {
   const [draftTitle, setDraftTitle] = useState("");
   const [draftSymbols, setDraftSymbols] = useState<string[]>([]);
   const [query, setQuery] = useState("");
+  const curYear = new Date().getFullYear();
+  const [draftStartYear, setDraftStartYear] = useState(curYear - DEFAULT_RANGE_YEARS);
+  const [draftEndYear, setDraftEndYear] = useState(curYear);
   const [rangeYears, setRangeYears] = useState(DEFAULT_RANGE_YEARS);
   const [startValue, setStartValue] = useState(100);
 
@@ -554,16 +557,26 @@ export default function Home() {
   async function runBacktest(group: ComparisonGroup, options?: { forceRefresh?: boolean }) {
     if (group.symbols.length === 0) return;
     setLoadingId(group.id);
+    const thisYear = new Date().getFullYear();
+    const reqBody: Record<string, unknown> = {
+      symbols: group.symbols,
+      rangeYears: group.rangeYears,
+      startValue: group.startValue ?? 100,
+      forceRefresh: options?.forceRefresh ?? false,
+    };
+    if (typeof group.startYear === "number") {
+      reqBody.startYear = group.startYear;
+      reqBody.startDate = `${group.startYear}-01-01`;
+    }
+    if (typeof group.endYear === "number" && group.endYear < thisYear) {
+      reqBody.endYear = group.endYear;
+      reqBody.endDate = `${group.endYear}-12-31`;
+    }
     try {
       const res = await fetch("/api/backtest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          symbols: group.symbols,
-          rangeYears: group.rangeYears,
-          startValue: group.startValue ?? 100,
-          forceRefresh: options?.forceRefresh ?? false,
-        }),
+        body: JSON.stringify(reqBody),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
@@ -657,11 +670,24 @@ export default function Home() {
       .filter((y): y is number => typeof y === "number" && y > 0);
     if (ceilings.length === 0) return; // every symbol errored — try again next run
     const maxAvailable = Math.min(RANGE_MAX, Math.max(RANGE_MIN, Math.ceil(Math.min(...ceilings))));
+    const thisYear = new Date().getFullYear();
 
     if (!group.rangeFitted) {
       const fit = maxAvailable;
-      const fitted = { ...group, rangeYears: fit, rangeFitted: true };
-      if (fit === group.rangeYears) {
+      const fitStart = thisYear - fit;
+      const fitEnd = thisYear;
+      const fitted = {
+        ...group,
+        rangeYears: fit,
+        startYear: fitStart,
+        endYear: fitEnd,
+        rangeFitted: true,
+      };
+      if (
+        fit === group.rangeYears &&
+        group.startYear === fitStart &&
+        group.endYear === fitEnd
+      ) {
         updateGroup(fitted);
         return;
       }
@@ -672,13 +698,23 @@ export default function Home() {
     // Even if rangeFitted (user adjusted or previous fit), if current range exceeds the shortest symbol ceiling,
     // clamp it down automatically to the shortest symbol's max ceiling.
     if (group.rangeYears > maxAvailable) {
-      const fitted = { ...group, rangeYears: maxAvailable };
+      const fitStart = Math.max(group.startYear ?? (thisYear - group.rangeYears), thisYear - maxAvailable);
+      const fitted = {
+        ...group,
+        rangeYears: maxAvailable,
+        startYear: fitStart,
+        endYear: group.endYear ?? thisYear,
+      };
       updateGroup(fitted, { rerun: true });
     }
   }
 
   function saveDraftAsGroup() {
     if (draftSymbols.length === 0) return;
+    const thisYear = new Date().getFullYear();
+    const sy = typeof draftStartYear === "number" ? draftStartYear : (thisYear - rangeYears);
+    const ey = typeof draftEndYear === "number" ? draftEndYear : thisYear;
+    const span = Math.max(1, ey - sy);
     const group: ComparisonGroup = {
       id: newGroupId(),
       // An unnamed group is titled by its symbols, so those carry their fund
@@ -687,16 +723,21 @@ export default function Home() {
       title: draftTitle.trim() || draftSymbols.map((s) => displaySymbol(s, lang)).join(" / "),
       symbols: draftSymbols,
       createdAt: new Date().toISOString(),
-      rangeYears,
+      rangeYears: span,
+      startYear: sy,
+      endYear: ey,
       // Left the draft slider at its default → let the first backtest fit the
       // range to the data. Moved it → that's the choice, keep it.
-      rangeFitted: rangeYears !== DEFAULT_RANGE_YEARS,
+      rangeFitted: span !== DEFAULT_RANGE_YEARS || ey !== thisYear,
       startValue,
     };
     upsertGroup(group).then((updated) => {
       setGroups(updated);
       setDraftTitle("");
       setDraftSymbols([]);
+      setDraftStartYear(thisYear - DEFAULT_RANGE_YEARS);
+      setDraftEndYear(thisYear);
+      setRangeYears(DEFAULT_RANGE_YEARS);
       setStartValue(100);
       setExpandedWithUrl(group.id);
       runBacktest(group);
@@ -834,9 +875,16 @@ export default function Home() {
     }
   }
 
-  function changeGroupRange(group: ComparisonGroup, years: number) {
+  function changeGroupRange(group: ComparisonGroup, startYear: number, endYear: number) {
     // A hand-picked range is a settled choice: opt this group out of auto-fit.
-    const updated = { ...group, rangeYears: years, rangeFitted: true };
+    const years = Math.max(1, endYear - startYear);
+    const updated: ComparisonGroup = {
+      ...group,
+      startYear,
+      endYear,
+      rangeYears: years,
+      rangeFitted: true,
+    };
     updateGroup(updated, { rerun: true, debounce: true });
   }
 
@@ -1028,11 +1076,18 @@ export default function Home() {
             </div>
           )}
 
-          <RangeSlider
+          <DualRangeSlider
             label={T.rangeYears}
-            value={rangeYears}
-            onChange={setRangeYears}
-            unit={rangeYears === 1 ? T.year : T.years}
+            min={curYear - RANGE_MAX}
+            max={curYear}
+            startValue={draftStartYear}
+            endValue={draftEndYear}
+            onChange={(start, end) => {
+              setDraftStartYear(start);
+              setDraftEndYear(end);
+              setRangeYears(end - start);
+            }}
+            unit={T.years}
           />
 
           <button
@@ -1308,6 +1363,21 @@ export default function Home() {
           const maxGroupYears = ceilings.length > 0
             ? Math.min(RANGE_MAX, Math.max(RANGE_MIN, Math.ceil(Math.min(...ceilings))))
             : RANGE_MAX;
+          const thisYear = new Date().getFullYear();
+          const groupMinYear = thisYear - maxGroupYears;
+          const groupMaxYear = thisYear;
+          const currentStartYear =
+            typeof g.startYear === "number"
+              ? g.startYear
+              : Math.max(groupMinYear, thisYear - (g.rangeYears || 5));
+          const currentEndYear = typeof g.endYear === "number" ? g.endYear : thisYear;
+
+          const sortedByInception = [...(result?.metrics ?? [])].sort((a, b) => {
+            const ya = typeof a.maxBacktestYears === "number" ? a.maxBacktestYears : 0;
+            const yb = typeof b.maxBacktestYears === "number" ? b.maxBacktestYears : 0;
+            if (ya !== yb) return ya - yb;
+            return a.symbol.localeCompare(b.symbol);
+          });
 
           return (
             <section className="flex flex-col gap-4 mt-2">
@@ -1486,12 +1556,14 @@ export default function Home() {
 
                 {/* Range and initial capital controllers */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end p-4 rounded-lg" style={{ background: "var(--background)", border: "1px solid var(--line)" }}>
-                  <RangeSlider
+                  <DualRangeSlider
                     label={T.rangeYears}
-                    value={g.rangeYears}
-                    onChange={(years) => changeGroupRange(g, years)}
-                    unit={g.rangeYears === 1 ? T.year : T.years}
-                    max={maxGroupYears}
+                    min={groupMinYear}
+                    max={groupMaxYear}
+                    startValue={currentStartYear}
+                    endValue={currentEndYear}
+                    onChange={(start, end) => changeGroupRange(g, start, end)}
+                    unit={T.years}
                   />
                   <NumberField
                     label={T.startValue}
@@ -1526,21 +1598,48 @@ export default function Home() {
                       </div>
                     )}
 
-                    {result.alignedWindow && (
-                      <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>
-                        {result.constrainedBy ? (
-                          <>
-                            {T.alignedNoticeBefore}
-                            <strong>{displaySymbol(result.constrainedBy, lang)}</strong>
-                            {T.alignedNoticeAfter}
-                          </>
-                        ) : (
-                          T.alignedFullBefore
-                        )}
-                        {result.alignedWindow.years} {T.years}（{result.alignedWindow.start} ~{" "}
-                        {result.alignedWindow.end}）
-                      </p>
-                    )}
+                    {/* Explanation text below adjustment bar: comparison period & itemized symbols by inception age */}
+                    <div className="flex flex-col gap-2 text-xs" style={{ color: "var(--foreground-muted)" }}>
+                      {result.alignedWindow && (
+                        <p className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-semibold" style={{ color: "var(--foreground)" }}>{T.currentComparisonPeriod}：</span>
+                          <span className="font-mono font-bold" style={{ color: "var(--orchid-ink)" }}>
+                            {result.alignedWindow.years} {T.years}
+                          </span>
+                          <span className="opacity-80">（{result.alignedWindow.start} ~ {result.alignedWindow.end}）</span>
+                        </p>
+                      )}
+
+                      {sortedByInception.length > 0 && (
+                        <div className="flex flex-col gap-1.5 pt-1.5 border-t" style={{ borderColor: "var(--line)" }}>
+                          <p className="font-medium" style={{ color: "var(--foreground)" }}>
+                            {T.symbolInceptionHistoryTitle}：
+                          </p>
+                          <ul className="flex flex-col gap-1.5 pl-1">
+                            {sortedByInception.map((m) => (
+                              <li key={m.symbol} className="flex items-center gap-2 flex-wrap">
+                                <span
+                                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: "var(--orchid-ink)" }}
+                                />
+                                <span className="font-semibold" style={{ color: "var(--foreground)" }}>
+                                  {displaySymbol(m.symbol, lang, m.simulated)}
+                                </span>
+                                <span>：</span>
+                                <span className="font-mono font-medium" style={{ color: "var(--foreground)" }}>
+                                  {m.maxBacktestYears !== undefined ? `${m.maxBacktestYears} ${T.years}` : "--"}
+                                </span>
+                                {m.firstDate && (
+                                  <span className="opacity-70 font-mono text-[11px]">
+                                    （{m.firstDate} {T.toDate}）
+                                  </span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
 
                     {result.chartSeries && result.chartSeries.length > 0 && (
                       <div>
@@ -1749,42 +1848,129 @@ function NumberField({
   );
 }
 
-function RangeSlider({
+function DualRangeSlider({
   label,
-  value,
+  min,
+  max,
+  startValue,
+  endValue,
   onChange,
   unit,
-  min = RANGE_MIN,
-  max = RANGE_MAX,
+  minGap = 1,
 }: {
   label: string;
-  value: number;
-  onChange: (v: number) => void;
+  min: number;
+  max: number;
+  startValue: number;
+  endValue: number;
+  onChange: (start: number, end: number) => void;
   unit: string;
-  min?: number;
-  max?: number;
+  minGap?: number;
 }) {
-  const safeMax = Math.max(min, max);
-  const clampedValue = Math.min(safeMax, Math.max(min, value));
+  const safeMax = Math.max(min + minGap, max);
+  const clampedStart = Math.min(safeMax - minGap, Math.max(min, startValue));
+  const clampedEnd = Math.max(clampedStart + minGap, Math.min(safeMax, endValue));
+
+  const totalRange = safeMax - min;
+  const leftPercent = totalRange > 0 ? ((clampedStart - min) / totalRange) * 100 : 0;
+  const rightPercent = totalRange > 0 ? ((clampedEnd - min) / totalRange) * 100 : 100;
+  const duration = clampedEnd - clampedStart;
+
+  const [activeThumb, setActiveThumb] = useState<"left" | "right" | null>(null);
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between text-sm">
-        <label className="opacity-70">{label}</label>
-        <span className="font-medium">
-          {clampedValue} {unit}
-        </span>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between text-sm flex-wrap gap-2">
+        <label className="opacity-70 font-medium">{label}</label>
+        <div className="flex items-center gap-1.5 font-mono">
+          <span className="font-semibold text-foreground">
+            {clampedStart} ~ {clampedEnd}
+          </span>
+          <span
+            className="text-xs px-2 py-0.5 rounded-full font-medium"
+            style={{ background: "var(--orchid-band)", color: "var(--orchid-ink)" }}
+          >
+            {duration} {unit}
+          </span>
+        </div>
       </div>
-      <input
-        type="range"
-        min={min}
-        max={safeMax}
-        step={1}
-        value={clampedValue}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-current"
-        style={{ accentColor: "var(--orchid-ink)" }}
-      />
+
+      <div
+        className="dual-range-container select-none cursor-pointer"
+        onClick={(e) => {
+          // If clicked directly on the track (not the thumbs), move nearest thumb
+          const rect = e.currentTarget.getBoundingClientRect();
+          const clickX = e.clientX - rect.left;
+          const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+          const clickedVal = Math.round(min + ratio * totalRange);
+          const distStart = Math.abs(clickedVal - clampedStart);
+          const distEnd = Math.abs(clickedVal - clampedEnd);
+          if (distStart < distEnd) {
+            onChange(Math.min(clickedVal, clampedEnd - minGap), clampedEnd);
+          } else {
+            onChange(clampedStart, Math.max(clickedVal, clampedStart + minGap));
+          }
+        }}
+      >
+        {/* Full background rail */}
+        <div
+          className="absolute w-full h-2 rounded-full pointer-events-none"
+          style={{ background: "var(--line)" }}
+        />
+        {/* Selected interval highlight bar */}
+        <div
+          className="absolute h-2 rounded-full pointer-events-none transition-all duration-75"
+          style={{
+            left: `${leftPercent}%`,
+            width: `${Math.max(0, rightPercent - leftPercent)}%`,
+            backgroundColor: "var(--orchid-ink)",
+          }}
+        />
+        {/* Start (Left) Range Input */}
+        <input
+          type="range"
+          min={min}
+          max={safeMax}
+          step={1}
+          value={clampedStart}
+          onFocus={() => setActiveThumb("left")}
+          onMouseDown={() => setActiveThumb("left")}
+          onTouchStart={() => setActiveThumb("left")}
+          onChange={(e) => {
+            const val = Number(e.target.value);
+            const clamped = Math.min(val, clampedEnd - minGap);
+            onChange(clamped, clampedEnd);
+          }}
+          className="dual-range-input"
+          style={{ zIndex: activeThumb === "left" || clampedStart > safeMax - 2 ? 6 : 4 }}
+          aria-label={`${label} Start Year`}
+        />
+        {/* End (Right) Range Input */}
+        <input
+          type="range"
+          min={min}
+          max={safeMax}
+          step={1}
+          value={clampedEnd}
+          onFocus={() => setActiveThumb("right")}
+          onMouseDown={() => setActiveThumb("right")}
+          onTouchStart={() => setActiveThumb("right")}
+          onChange={(e) => {
+            const val = Number(e.target.value);
+            const clamped = Math.max(val, clampedStart + minGap);
+            onChange(clampedStart, clamped);
+          }}
+          className="dual-range-input"
+          style={{ zIndex: activeThumb === "right" ? 6 : 5 }}
+          aria-label={`${label} End Year`}
+        />
+      </div>
+
+      {/* Axis marks below the slider */}
+      <div className="flex justify-between items-center text-[11px] font-mono opacity-60 px-0.5">
+        <span>{min}</span>
+        <span>{safeMax}</span>
+      </div>
     </div>
   );
 }

@@ -43,6 +43,18 @@ function ensureSchema(db: D1Database): Promise<void> {
         const msg = e instanceof Error ? e.message : String(e);
         if (!/duplicate column name/i.test(msg)) throw e;
       }
+      try {
+        await db.prepare("ALTER TABLE portfolios ADD COLUMN startYear INTEGER").run();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/duplicate column name/i.test(msg)) throw e;
+      }
+      try {
+        await db.prepare("ALTER TABLE portfolios ADD COLUMN endYear INTEGER").run();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/duplicate column name/i.test(msg)) throw e;
+      }
     })().catch((e) => {
       schemaReady = null;
       throw e;
@@ -88,6 +100,8 @@ export async function GET() {
       // the slider was moved) and the group is left alone.
       rangeFitted: Boolean(row.rangeFitted),
       sortOrder: Number(row.sortOrder) || 0,
+      startYear: row.startYear !== null && row.startYear !== undefined ? Number(row.startYear) : undefined,
+      endYear: row.endYear !== null && row.endYear !== undefined ? Number(row.endYear) : undefined,
     }));
 
     return Response.json({ groups, persisted: true });
@@ -101,7 +115,7 @@ export async function POST(request: Request) {
   try {
     const db = await getDB();
     const body = await request.json();
-    const { id, title, symbols, rangeYears, startValue, rangeFitted, sortOrder, createdAt } =
+    const { id, title, symbols, rangeYears, startYear, endYear, startValue, rangeFitted, sortOrder, createdAt } =
       body as ComparisonGroup;
 
     if (!id || !title || !symbols || rangeYears === undefined) {
@@ -120,6 +134,8 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     const symbolsJson = JSON.stringify(symbols);
     const order = typeof sortOrder === "number" ? sortOrder : 0;
+    const sy = typeof startYear === "number" ? startYear : null;
+    const ey = typeof endYear === "number" ? endYear : null;
 
     // Check if already exists
     const existing = await db
@@ -130,20 +146,22 @@ export async function POST(request: Request) {
     if (existing) {
       await db
         .prepare(
-          "UPDATE portfolios SET title = ?, symbols = ?, rangeYears = ?, startValue = ?, rangeFitted = ?, sortOrder = ?, updatedAt = ? WHERE id = ?"
+          "UPDATE portfolios SET title = ?, symbols = ?, rangeYears = ?, startYear = ?, endYear = ?, startValue = ?, rangeFitted = ?, sortOrder = ?, updatedAt = ? WHERE id = ?"
         )
-        .bind(title, symbolsJson, rangeYears, startValue || 100, rangeFitted ? 1 : 0, order, now, id)
+        .bind(title, symbolsJson, rangeYears, sy, ey, startValue || 100, rangeFitted ? 1 : 0, order, now, id)
         .run();
     } else {
       await db
         .prepare(
-          "INSERT INTO portfolios (id, title, symbols, rangeYears, startValue, rangeFitted, sortOrder, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO portfolios (id, title, symbols, rangeYears, startYear, endYear, startValue, rangeFitted, sortOrder, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(
           id,
           title,
           symbolsJson,
           rangeYears,
+          sy,
+          ey,
           startValue || 100,
           rangeFitted ? 1 : 0,
           order,

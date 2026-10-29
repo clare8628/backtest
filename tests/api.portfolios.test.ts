@@ -62,6 +62,46 @@ describe("Portfolio API", () => {
 
     expect(portfolio.sortOrder).toBe(2);
   });
+
+  it("should support optional startYear and endYear fields for custom interval", () => {
+    const portfolio: ComparisonGroup = {
+      id: "grp_interval",
+      title: "Custom Interval",
+      symbols: ["VOO", "SPY"],
+      rangeYears: 7,
+      startYear: 2015,
+      endYear: 2022,
+      createdAt: new Date().toISOString(),
+    };
+
+    expect(portfolio.startYear).toBe(2015);
+    expect(portfolio.endYear).toBe(2022);
+    expect(portfolio.rangeYears).toBe(7);
+  });
+});
+
+describe("Inception age sorting (BAC-19)", () => {
+  it("sorts targets by maxBacktestYears ascending from shortest to longest", () => {
+    const metrics = [
+      { symbol: "SPY", maxBacktestYears: 33.7, firstDate: "1993-01-29" },
+      { symbol: "QQQI", maxBacktestYears: 1.5, firstDate: "2024-10-25" },
+      { symbol: "0050.TW", maxBacktestYears: 23.3, firstDate: "2003-06-30" },
+      { symbol: "SPMO", maxBacktestYears: 8.8, firstDate: "2015-10-15" },
+    ];
+
+    const sorted = [...metrics].sort((a, b) => {
+      const ya = typeof a.maxBacktestYears === "number" ? a.maxBacktestYears : 0;
+      const yb = typeof b.maxBacktestYears === "number" ? b.maxBacktestYears : 0;
+      if (ya !== yb) return ya - yb;
+      return a.symbol.localeCompare(b.symbol);
+    });
+
+    expect(sorted.map((m) => m.symbol)).toEqual(["QQQI", "SPMO", "0050.TW", "SPY"]);
+    expect(sorted[0].maxBacktestYears).toBe(1.5);
+    expect(sorted[1].maxBacktestYears).toBe(8.8);
+    expect(sorted[2].maxBacktestYears).toBe(23.3);
+    expect(sorted[3].maxBacktestYears).toBe(33.7);
+  });
 });
 
 describe("reorderArray", () => {

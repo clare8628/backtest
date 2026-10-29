@@ -45,7 +45,7 @@ const USD_TWD_FX_SYMBOL = "TWD=X";
 // window would badly degrade every metric (volatility, Sharpe, drawdown,
 // beta, the chart itself) down to monthly resolution, not just the ceiling
 // calculation that can tolerate it.
-const CEILING_FETCH_YEARS = 30;
+const CEILING_FETCH_YEARS = 50;
 
 function benchmarkFor(symbol: string): string {
   return isTaiwanListed(symbol) ? TW_MARKET_BENCHMARK_SYMBOL : US_MARKET_BENCHMARK_SYMBOL;
@@ -66,6 +66,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const symbols: string[] = Array.isArray(body?.symbols) ? body.symbols : [];
     const rangeYears: number = typeof body?.rangeYears === "number" ? body.rangeYears : 5;
+    const startDate: string | undefined =
+      typeof body?.startDate === "string" && body.startDate ? body.startDate : undefined;
+    const endDate: string | undefined =
+      typeof body?.endDate === "string" && body.endDate ? body.endDate : undefined;
     const startValue: number =
       typeof body?.startValue === "number" && body.startValue > 0 ? body.startValue : 100;
 
@@ -90,11 +94,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Determine how many years of daily data we need to fetch.
+    // If a custom startDate is specified, ensure the fetch window reaches back far enough.
+    const MS_PER_YEAR = 1000 * 60 * 60 * 24 * 365.25;
+    const yearsFromStart = startDate
+      ? Math.ceil((Date.now() - new Date(startDate).getTime()) / MS_PER_YEAR) + 1
+      : rangeYears;
+    const fetchRangeYears = Math.min(30, Math.max(rangeYears, yearsFromStart));
+
     // Main fetch at the user's requested (daily-resolution) range, plus a
     // parallel low-cost fetch purely to learn each symbol's true native date
     // span for the "max backtestable years" ceiling (see CEILING_FETCH_YEARS).
     const [{ results, errors }, { results: ceilingResults }] = await Promise.all([
-      fetchMultiple(symbols, rangeYears, forceRefresh),
+      fetchMultiple(symbols, fetchRangeYears, forceRefresh),
       fetchMultiple(symbols, CEILING_FETCH_YEARS, forceRefresh),
     ]);
 
@@ -102,7 +114,11 @@ export async function POST(req: NextRequest) {
     // currently selected range — a fund listed 2 years ago tops out at ~2
     // years no matter how far the range slider is pushed.
     const maxBacktestYears: Record<string, number> = {};
-    for (const s of ceilingResults) maxBacktestYears[s.symbol] = seriesYears(s.prices);
+    const firstTradeDates: Record<string, string | undefined> = {};
+    for (const s of ceilingResults) {
+      maxBacktestYears[s.symbol] = seriesYears(s.prices);
+      firstTradeDates[s.symbol] = s.prices[0]?.date;
+    }
 
     // Each symbol's actual data span within the requested range — a fund
     // listed more recently than `rangeYears` ago falls short of it.
@@ -129,7 +145,15 @@ export async function POST(req: NextRequest) {
     // Auto-align the whole group to the overlapping window shared by every
     // symbol, pegged to whichever one has the shortest available history, so
     // headline metrics never silently span different eras across symbols.
-    const window = commonWindow(results, unsimulatedCounterparts);
+    const baseWindow = commonWindow(results, unsimulatedCounterparts);
+    let window = baseWindow;
+    if (window && (startDate || endDate)) {
+      const effStart = startDate && startDate > window.start ? startDate : window.start;
+      const effEnd = endDate && endDate < window.end ? endDate : window.end;
+      if (effStart <= effEnd) {
+        window = { start: effStart, end: effEnd };
+      }
+    }
     const alignedResults = window
       ? results.map((s) => ({ ...s, prices: trimToWindow(s.prices, window) }))
       : results;
@@ -210,6 +234,7 @@ export async function POST(req: NextRequest) {
         benchmarkSymbol,
         simulated: isSimulatedSymbol(s.symbol) && usesSimulation(s),
         maxBacktestYears: round2(maxBacktestYears[s.symbol] ?? 0),
+        firstDate: firstTradeDates[s.symbol],
         trendR2: trend.trendR2 === null ? null : round2(trend.trendR2),
         newHighMonthPct: trend.newHighMonthPct === null ? null : round2(trend.newHighMonthPct),
         positiveYearPct: trend.positiveYearPct === null ? null : round2(trend.positiveYearPct),
