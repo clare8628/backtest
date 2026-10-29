@@ -731,12 +731,14 @@ export default function Home() {
     const thisYear = new Date().getFullYear();
     const rangeBounds = calculateBacktestRange(data.metrics, thisYear, RANGE_MAX);
 
-    // If the symbols have earlier history than the group's current startYear (e.g. QQQ starts in 1999, but current start is 2006),
-    // automatically expand the startYear backwards to include all available history.
-    const currentStartYear = typeof group.startYear === "number" ? group.startYear : (thisYear - group.rangeYears);
-    const hasEarlierHistory = rangeBounds.minYear < currentStartYear;
-
-    if (!group.rangeFitted || hasEarlierHistory) {
+    // Only auto-fit on a brand-new/never-adjusted group (rangeFitted === false,
+    // set whenever symbols change). Once the user has hand-picked a range via
+    // the slider (changeGroupRange sets rangeFitted: true), never expand it
+    // back out — symbols almost always have earlier history than whatever
+    // narrower window the user just dragged to, so doing so here used to snap
+    // a manually narrowed start year straight back to the symbol's inception
+    // year a moment after release.
+    if (!group.rangeFitted) {
       const fitStart = rangeBounds.minYear;
       const fitEnd = rangeBounds.maxYear;
       const fit = rangeBounds.maxYears;
@@ -1949,6 +1951,14 @@ function DualRangeSlider({
   const totalRange = safeMax - min;
   const leftPercent = totalRange > 0 ? ((clampedStart - min) / totalRange) * 100 : 0;
   const rightPercent = totalRange > 0 ? ((clampedEnd - min) / totalRange) * 100 : 100;
+  // When the two thumbs sit close together their native hit-circles overlap;
+  // whichever <input> is on top then eats every click in that overlap, even
+  // ones meant for the other handle. Give priority to whichever thumb is on
+  // the far side of the track's midpoint, so the handle you'd struggle to
+  // reach is always the one in front.
+  const midpoint = (min + safeMax) / 2;
+  const leftWantsFront = clampedStart > midpoint;
+  const rightWantsFront = clampedEnd <= midpoint;
   const duration = clampedEnd - clampedStart;
 
   const [activeThumb, setActiveThumb] = useState<"left" | "right" | null>(null);
@@ -2026,14 +2036,17 @@ function DualRangeSlider({
           step={1}
           value={clampedStart}
           onFocus={() => setActiveThumb("left")}
+          onBlur={() => setActiveThumb((cur) => (cur === "left" ? null : cur))}
           onMouseDown={() => {
             setActiveThumb("left");
             pokeDragTooltip();
           }}
+          onMouseUp={() => setActiveThumb((cur) => (cur === "left" ? null : cur))}
           onTouchStart={() => {
             setActiveThumb("left");
             pokeDragTooltip();
           }}
+          onTouchEnd={() => setActiveThumb((cur) => (cur === "left" ? null : cur))}
           onKeyDown={() => {
             setActiveThumb("left");
             pokeDragTooltip();
@@ -2045,7 +2058,7 @@ function DualRangeSlider({
             pokeDragTooltip();
           }}
           className="dual-range-input"
-          style={{ zIndex: activeThumb === "left" || clampedStart > safeMax - 2 ? 6 : 4 }}
+          style={{ zIndex: activeThumb === "left" ? 7 : leftWantsFront ? 5 : 4 }}
           aria-label={`${label} Start Year`}
         />
         {/* End (Right) Range Input */}
@@ -2056,14 +2069,17 @@ function DualRangeSlider({
           step={1}
           value={clampedEnd}
           onFocus={() => setActiveThumb("right")}
+          onBlur={() => setActiveThumb((cur) => (cur === "right" ? null : cur))}
           onMouseDown={() => {
             setActiveThumb("right");
             pokeDragTooltip();
           }}
+          onMouseUp={() => setActiveThumb((cur) => (cur === "right" ? null : cur))}
           onTouchStart={() => {
             setActiveThumb("right");
             pokeDragTooltip();
           }}
+          onTouchEnd={() => setActiveThumb((cur) => (cur === "right" ? null : cur))}
           onKeyDown={() => {
             setActiveThumb("right");
             pokeDragTooltip();
@@ -2075,7 +2091,7 @@ function DualRangeSlider({
             pokeDragTooltip();
           }}
           className="dual-range-input"
-          style={{ zIndex: activeThumb === "right" ? 6 : 5 }}
+          style={{ zIndex: activeThumb === "right" ? 7 : rightWantsFront ? 5 : 4 }}
           aria-label={`${label} End Year`}
         />
 
