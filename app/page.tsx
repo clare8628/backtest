@@ -695,14 +695,12 @@ export default function Home() {
     const thisYear = new Date().getFullYear();
     const rangeBounds = calculateBacktestRange(data.metrics, thisYear, RANGE_MAX);
 
-    // Existing saved groups might be stuck at 2006 (20 years) due to previous hardcoded 20-year ceiling.
-    // If the symbols actually have earlier history (e.g. QQQ 1999), automatically upgrade them.
-    const isOld20YearCap =
-      group.rangeYears === 20 &&
-      (group.startYear === 2006 || group.startYear === undefined || group.startYear === null) &&
-      rangeBounds.minYear < 2006;
+    // If the symbols have earlier history than the group's current startYear (e.g. QQQ starts in 1999, but current start is 2006),
+    // automatically expand the startYear backwards to include all available history.
+    const currentStartYear = typeof group.startYear === "number" ? group.startYear : (thisYear - group.rangeYears);
+    const hasEarlierHistory = rangeBounds.minYear < currentStartYear;
 
-    if (!group.rangeFitted || isOld20YearCap) {
+    if (!group.rangeFitted || hasEarlierHistory) {
       const fitStart = rangeBounds.minYear;
       const fitEnd = rangeBounds.maxYear;
       const fit = rangeBounds.maxYears;
