@@ -98,7 +98,36 @@ async function extendWithSimulation(
   }
 }
 
+/**
+ * Dedupes concurrent requests for the same underlying series.
+ *
+ * Comparing several @alo/@sim variants of the same base ticker (e.g.
+ * `TQQQ@alo(60:40)` vs `TQQQ@alo(80:20)`) fans out one `fetchDailyPrices`
+ * call per variant, and each independently calls down to this function with
+ * the same (symbol, rangeYears, forceRefresh) key — Next's HTTP-level fetch
+ * cache doesn't help here because all those calls race before any of them
+ * populates it. Sharing the in-flight promise collapses them into a single
+ * underlying fetch. The entry is removed as soon as it settles, so this is
+ * pure request coalescing, not a second (potentially stale) data cache.
+ */
+const inFlightRealPrices = new Map<string, Promise<SymbolSeries>>();
+
 async function fetchRealDailyPrices(
+  symbol: string,
+  rangeYears = 5,
+  forceRefresh = false
+): Promise<SymbolSeries> {
+  const key = `${symbol.trim().toUpperCase()}|${rangeYears}|${forceRefresh}`;
+  const cached = inFlightRealPrices.get(key);
+  if (cached) return cached;
+  const promise = fetchRealDailyPricesUncached(symbol, rangeYears, forceRefresh).finally(() =>
+    inFlightRealPrices.delete(key)
+  );
+  inFlightRealPrices.set(key, promise);
+  return promise;
+}
+
+async function fetchRealDailyPricesUncached(
   symbol: string,
   rangeYears = 5,
   forceRefresh = false
