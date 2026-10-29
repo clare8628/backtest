@@ -137,7 +137,8 @@ function distributionLabel(count: number | null | undefined, T: Dict): string {
 
 type Dict = ReturnType<typeof t>;
 interface MetricRow {
-  label: string;
+  key?: string;
+  label: ReactNode;
   value: (m: BacktestMetrics) => ReactNode;
   color?: (m: BacktestMetrics) => string | undefined;
 }
@@ -152,29 +153,63 @@ interface MetricRow {
 function metricSections(
   T: Dict,
   lang: Lang,
-  withdrawnValues?: Record<string, { value: number; depletedDate: string | null }>
+  withdrawnValues?: Record<string, { value: number; depletedDate: string | null }>,
+  simSettings?: SimSettings,
+  onEnableSim?: () => void
 ): { title: string; rows: MetricRow[] }[] {
+  const wRate = simSettings?.withdrawalRate ?? 3;
+  const iRate = simSettings?.inflationRate ?? 3;
+
   return [
     {
       title: T.groupReturn,
       rows: [
-        { label: T.totalReturn, value: (m) => pct(m.totalReturn) },
-        { label: T.annualizedReturn, value: (m) => pct(m.annualizedReturn) },
-        { label: T.finalValue, value: (m) => m.finalValue.toLocaleString() },
+        { key: "totalReturn", label: T.totalReturn, value: (m) => pct(m.totalReturn) },
+        { key: "annualizedReturn", label: T.annualizedReturn, value: (m) => pct(m.annualizedReturn) },
+        { key: "finalValue", label: T.finalValue, value: (m) => m.finalValue.toLocaleString() },
         {
-          label: T.withdrawnFinalValue,
+          key: "withdrawnFinalValue",
+          label: (
+            <span className="inline-flex items-center gap-1.5 flex-wrap">
+              <span>{T.withdrawnFinalValue}</span>
+              <span className="text-[11px] opacity-60 font-normal">
+                ({wRate}%{lang === "zh" ? "提領" : "wd"}, {iRate}%{lang === "zh" ? "通膨" : "inf"})
+              </span>
+              <span
+                className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full text-[10px] border border-current opacity-60 hover:opacity-100 cursor-help"
+                title={T.withdrawnSimTooltip}
+              >
+                ?
+              </span>
+            </span>
+          ),
           value: (m) => {
             const data = withdrawnValues?.[m.symbol];
             if (!data) return DASH;
             if (data.depletedDate) {
               const year = new Date(data.depletedDate).getFullYear();
               return (
-                <span className="inline-flex items-center gap-1" style={{ color: "var(--negative)" }}>
-                  <span>0</span>
-                  <span className="text-xs opacity-75 font-normal">
-                    ({T.depletedAt} {year})
+                <div className="inline-flex flex-col items-end gap-0.5">
+                  <span className="inline-flex items-center gap-1 font-semibold" style={{ color: "var(--negative)" }}>
+                    <span>0</span>
+                    <span className="text-xs opacity-85 font-normal">
+                      ({T.depletedAt} {year})
+                    </span>
                   </span>
-                </span>
+                  {onEnableSim && !simSettings?.enabled && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEnableSim();
+                      }}
+                      className="text-[10px] text-[var(--orchid-ink)] underline hover:opacity-80 transition-opacity cursor-pointer font-normal"
+                      title={T.viewWithdrawalCurveTooltip}
+                    >
+                      {T.viewWithdrawalCurve}
+                    </button>
+                  )}
+                </div>
               );
             }
             return data.value.toLocaleString();
@@ -298,6 +333,7 @@ function MetricsTable({
   chartSeries,
   startValue = 100,
   simSettings,
+  onEnableSim,
 }: {
   metrics: BacktestMetrics[];
   T: Dict;
@@ -305,8 +341,9 @@ function MetricsTable({
   chartSeries?: ChartSeries[];
   startValue?: number;
   simSettings?: SimSettings;
+  onEnableSim?: () => void;
 }) {
-  const effectiveSim = simSettings ?? { enabled: true, withdrawalRate: 3, inflationRate: 3 };
+  const effectiveSim = simSettings ?? { enabled: false, withdrawalRate: 3, inflationRate: 3 };
 
   const withdrawnValues = useMemo(() => {
     if (!chartSeries || chartSeries.length === 0) return {};
@@ -336,7 +373,7 @@ function MetricsTable({
     return res;
   }, [chartSeries, startValue, effectiveSim.withdrawalRate, effectiveSim.inflationRate]);
 
-  const sections = metricSections(T, lang, withdrawnValues);
+  const sections = metricSections(T, lang, withdrawnValues, simSettings, onEnableSim);
   const sortedMetrics = useMemo(() => {
     return [...metrics].sort((a, b) => (b.totalReturn ?? 0) - (a.totalReturn ?? 0));
   }, [metrics]);
@@ -364,26 +401,29 @@ function MetricsTable({
                 {section.title}
               </td>
             </tr>
-            {section.rows.map((row) => (
-              <tr key={row.label} className="metrics-row border-t cursor-default" style={{ borderColor: "var(--line)" }}>
-                <th
-                  scope="row"
-                  className="py-2 pl-2 pr-4 text-left text-xs font-normal rounded-l whitespace-nowrap"
-                  style={{ color: "var(--foreground-muted)" }}
-                >
-                  {row.label}
-                </th>
-                {sortedMetrics.map((m, idx) => (
-                  <td
-                    key={m.symbol}
-                    className={`py-2 px-2 text-right tabular-nums${idx === sortedMetrics.length - 1 ? " pr-2 rounded-r" : ""}`}
-                    style={{ color: row.color?.(m) }}
+            {section.rows.map((row, rIdx) => {
+              const rowKey = row.key ?? (typeof row.label === "string" ? row.label : `row-${rIdx}`);
+              return (
+                <tr key={rowKey} className="metrics-row border-t cursor-default" style={{ borderColor: "var(--line)" }}>
+                  <th
+                    scope="row"
+                    className="py-2 pl-2 pr-4 text-left text-xs font-normal rounded-l whitespace-nowrap"
+                    style={{ color: "var(--foreground-muted)" }}
                   >
-                    {row.value(m)}
-                  </td>
-                ))}
-              </tr>
-            ))}
+                    {row.label}
+                  </th>
+                  {sortedMetrics.map((m, idx) => (
+                    <td
+                      key={m.symbol}
+                      className={`py-2 px-2 text-right tabular-nums${idx === sortedMetrics.length - 1 ? " pr-2 rounded-r" : ""}`}
+                      style={{ color: row.color?.(m) }}
+                    >
+                      {row.value(m)}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
           </Fragment>
         ))}
       </tbody>
@@ -1657,8 +1697,18 @@ export default function Home() {
                             chartSeries={result.chartSeries}
                             startValue={g.startValue ?? 100}
                             simSettings={simSettingsMap[g.id] ?? { enabled: false, withdrawalRate: 3, inflationRate: 3 }}
+                            onEnableSim={() =>
+                              setSimSettingsMap((prev) => ({
+                                ...prev,
+                                [g.id]: {
+                                  ...(prev[g.id] ?? { withdrawalRate: 3, inflationRate: 3 }),
+                                  enabled: true,
+                                },
+                              }))
+                            }
                           />
                         </div>
+                        <Note title={T.withdrawalSimVsBuyHoldTitle} body={T.withdrawalSimVsBuyHoldText} />
                         <Note title={T.sourceNote} body={T.sourceNoteText} />
                         <Note title={T.trendNote} body={T.trendNoteText} />
                         <p className="text-xs" style={{ color: "var(--foreground-muted)" }}>

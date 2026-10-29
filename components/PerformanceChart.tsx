@@ -970,14 +970,37 @@ export default function PerformanceChart({
                     style={{ opacity: isDimmed ? 0.2 : 0.85 }}
                   />
                   {s.depletedDate && (
-                    <circle
-                      cx={xFor(new Date(s.depletedDate).getTime())}
-                      cy={yFor(0)}
-                      r={5}
-                      fill="#DC2626"
-                      stroke="var(--surface)"
-                      strokeWidth={1.8}
-                    />
+                    <g key={`depleted-badge-${s.symbol}`}>
+                      <circle
+                        cx={xFor(new Date(s.depletedDate).getTime())}
+                        cy={yFor(0)}
+                        r={5.5}
+                        fill="#DC2626"
+                        stroke="var(--surface)"
+                        strokeWidth={1.8}
+                      />
+                      <g transform={`translate(${Math.max(padding.left + 40, Math.min(width - padding.right - 46, xFor(new Date(s.depletedDate).getTime())))}, ${Math.max(padding.top + 14, yFor(0) - 18)})`}>
+                        <rect
+                          x={-42}
+                          y={-2}
+                          width={84}
+                          height={16}
+                          rx={3}
+                          fill="#DC2626"
+                          filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.25))"
+                        />
+                        <text
+                          x={0}
+                          y={9.5}
+                          fontSize={8.5}
+                          fontWeight={700}
+                          fill="white"
+                          textAnchor="middle"
+                        >
+                          {lang === "zh" ? `耗盡 (${new Date(s.depletedDate).getFullYear()})` : `Depleted (${new Date(s.depletedDate).getFullYear()})`}
+                        </text>
+                      </g>
+                    </g>
                   )}
                 </g>
               );
@@ -1367,15 +1390,17 @@ export default function PerformanceChart({
         })}
 
         {simEnabled && (
-          <span className="flex items-center gap-1.5 px-2 py-1 text-xs opacity-75">
-            <span
-              className="inline-block w-4 h-0.5 border-t-2 border-dashed"
-              style={{ borderColor: "currentColor" }}
-            />
-            <span>
-              {T.withdrawnCurveLabel}（{withdrawalRate}%提領, {inflationRate}%通膨）
+          <div className="flex flex-wrap items-center gap-2 px-2.5 py-1 bg-[var(--background)] rounded-lg border border-[var(--line)] text-xs">
+            <span className="flex items-center gap-1.5 opacity-90 font-medium">
+              <span className="inline-block w-3.5 h-0.5 bg-current rounded-full" />
+              <span>{T.legendBuyHold}</span>
             </span>
-          </span>
+            <span className="opacity-30">|</span>
+            <span className="flex items-center gap-1.5 text-[var(--negative)] font-medium">
+              <span className="inline-block w-3.5 h-0.5 border-t-2 border-dashed border-current" />
+              <span>{T.legendWithdrawn}（{withdrawalRate}%提領, {inflationRate}%通膨）</span>
+            </span>
+          </div>
         )}
 
         <span className="ml-auto text-[11px] text-[var(--foreground-muted)]">
