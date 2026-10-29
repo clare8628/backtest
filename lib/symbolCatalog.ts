@@ -1,4 +1,12 @@
-import { getLeverageSpec, isSimulatedSymbol, SIM_SUFFIX, stripSimSuffix } from "./leverageSim";
+import {
+  ALO_SUFFIX,
+  allocationSuffix,
+  getLeverageSpec,
+  isSimulatedSymbol,
+  parseAllocation,
+  SIM_SUFFIX,
+  stripSimSuffix,
+} from "./leverageSim";
 import { Currency } from "./types";
 
 export interface CatalogEntry {
@@ -442,7 +450,9 @@ export function symbolLabel(
 ): { code: string; name?: string } {
   const hasSimSuffix = isSimulatedSymbol(symbol);
   const trimmed = stripSimSuffix(symbol).trim();
-  const tag = simulated || hasSimSuffix ? SIM_SUFFIX : "";
+  const alloc = parseAllocation(symbol);
+  const tag =
+    (simulated || hasSimSuffix ? SIM_SUFFIX : "") + (alloc ? allocationSuffix(alloc) : "");
   if (!TW_SUFFIX.test(trimmed)) return { code: trimmed + tag };
   const entry = findEntry(trimmed);
   if (!entry) return { code: trimmed + tag };
@@ -525,19 +535,31 @@ function matchRank(e: CatalogEntry, q: string): number {
 }
 
 /**
- * The suggestion list's entry for a leveraged ETF's simulated pre-inception
- * extension, shown right under the fund's own entry — e.g. searching "T" lists
- * TQQQ followed by "TQQQ@sim" so the feature is discoverable without already
- * knowing it exists. Picking it adds the same underlying symbol: "@sim" is a
- * display label, stripped by addSymbol/addSymbolToGroup before use.
+ * The suggestion list's variants of a leveraged ETF, shown right under the
+ * fund's own entry — e.g. searching "T" lists TQQQ, TQQQ@alo, TQQQ@sim and
+ * TQQQ@sim@alo so the features are discoverable without already knowing they
+ * exist. "@sim" extends history before inception; "@alo" blends the ETF with
+ * cash (ratio typed by the user, default 60:40), rebalanced every 11/1.
  */
-function simSuggestionFor(e: CatalogEntry): CatalogEntry {
-  return {
-    ...e,
-    symbol: `${e.symbol}${SIM_SUFFIX}`,
+function variantSuggestionsFor(e: CatalogEntry): CatalogEntry[] {
+  const sim = {
     name: `${e.name}（模擬延伸至成立前）`,
     nameEn: `${e.nameEn} (simulated, extended before inception)`,
   };
+  const alo = {
+    name: `${e.name}（ETF+現金配置，每年11/1再平衡）`,
+    nameEn: `${e.nameEn} (ETF + cash allocation, rebalanced every 11/1)`,
+  };
+  return [
+    { ...e, symbol: `${e.symbol}${ALO_SUFFIX}`, ...alo },
+    { ...e, symbol: `${e.symbol}${SIM_SUFFIX}`, ...sim },
+    {
+      ...e,
+      symbol: `${e.symbol}${SIM_SUFFIX}${ALO_SUFFIX}`,
+      name: `${sim.name}${alo.name.slice(e.name.length)}`,
+      nameEn: `${sim.nameEn}${alo.nameEn.slice(e.nameEn.length)}`,
+    },
+  ];
 }
 
 export function searchCatalog(query: string): CatalogEntry[] {
@@ -562,5 +584,5 @@ export function searchCatalog(query: string): CatalogEntry[] {
         .sort((a, b) => a.rank - b.rank)
         .slice(0, 8)
         .map(({ e }) => e);
-  return matched.flatMap((e) => (getLeverageSpec(e.symbol) ? [e, simSuggestionFor(e)] : [e]));
+  return matched.flatMap((e) => (getLeverageSpec(e.symbol) ? [e, ...variantSuggestionsFor(e)] : [e]));
 }

@@ -497,7 +497,7 @@ export function calculateBacktestRange(
   );
   const unsimulatedCounterparts = new Set(
     metrics
-      .filter((m) => !isSimulatedSymbol(m.symbol) && simVariantBases.has(m.symbol.toUpperCase()))
+      .filter((m) => !isSimulatedSymbol(m.symbol) && simVariantBases.has(stripSimSuffix(m.symbol).toUpperCase()))
       .map((m) => m.symbol)
   );
   const candidateMetrics = metrics.filter((m) => !unsimulatedCounterparts.has(m.symbol));

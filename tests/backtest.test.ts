@@ -1101,7 +1101,11 @@ describe("searchCatalog with a leveraged ETF prefix", () => {
     const results = searchCatalog("TQQ");
     const tqqqIdx = results.findIndex((r) => r.symbol === "TQQQ");
     expect(tqqqIdx).toBeGreaterThanOrEqual(0);
-    expect(results[tqqqIdx + 1]?.symbol).toBe("TQQQ@sim");
+    expect(results.slice(tqqqIdx + 1, tqqqIdx + 4).map((r) => r.symbol)).toEqual([
+      "TQQQ@alo",
+      "TQQQ@sim",
+      "TQQQ@sim@alo",
+    ]);
   });
 
   it("finds the ETF even when query includes @sim", () => {

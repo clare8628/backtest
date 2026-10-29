@@ -1,6 +1,15 @@
 import { Currency, DividendEvent, PricePoint, SplitEvent, SymbolSeries } from "./types";
 import { findEntry } from "./symbolCatalog";
-import { getLeverageSpec, isSimulatedSymbol, simVariantSymbol, simulatePrefix, stripSimSuffix } from "./leverageSim";
+import {
+  getLeverageSpec,
+  isSimulatedSymbol,
+  parseAllocation,
+  simulateAllocation,
+  simulatePrefix,
+  stripSimSuffix,
+  variantSymbol,
+  withVariantOf,
+} from "./leverageSim";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -43,14 +52,27 @@ export async function fetchDailyPrices(
   forceRefresh = false
 ): Promise<SymbolSeries> {
   const isSim = isSimulatedSymbol(symbol);
+  const alloc = parseAllocation(symbol);
   const base = stripSimSuffix(symbol);
-  const series = await fetchRealDailyPrices(base, rangeYears, forceRefresh);
-  const canonicalSym = isSim ? simVariantSymbol(base) : base.trim().toUpperCase();
-  if (!isSim) {
-    return { ...series, symbol: canonicalSym };
+  if (alloc && !alloc.valid) {
+    throw new Error(`配置比例需合計 100%，例如 ${base.toUpperCase()}@alo(60:40)：${symbol}`);
   }
-  const extended = await extendWithSimulation(series, rangeYears, forceRefresh);
-  return { ...extended, symbol: canonicalSym };
+  if (alloc && !getLeverageSpec(base)) {
+    throw new Error(`「${base.toUpperCase()}」非槓桿型 ETF，不支援 @alo 資產配置調整。`);
+  }
+  const series = await fetchRealDailyPrices(base, rangeYears, forceRefresh);
+  const canonicalSym = variantSymbol(base, { sim: isSim, alloc });
+  const extended = isSim ? await extendWithSimulation(series, rangeYears, forceRefresh) : series;
+  if (!alloc) return { ...extended, symbol: canonicalSym };
+  // The blended portfolio is its own price series: the ETF's own split and
+  // distribution events don't apply to it.
+  return {
+    ...extended,
+    symbol: canonicalSym,
+    prices: simulateAllocation(extended.prices, alloc),
+    splits: undefined,
+    dividends: undefined,
+  };
 }
 
 /**
@@ -558,14 +580,26 @@ async function lookupTaiwanOpenApi(rawSymbol: string): Promise<SymbolLookupResul
   return null;
 }
 
-function applySimVariant(res: SymbolLookupResult, isSim: boolean): SymbolLookupResult {
-  if (!isSim || !res.found) return res;
+function applySimVariant(res: SymbolLookupResult, rawSymbol: string): SymbolLookupResult {
+  const isSim = isSimulatedSymbol(rawSymbol);
+  const alloc = parseAllocation(rawSymbol);
+  if ((!isSim && !alloc) || !res.found) return res;
+  let name = res.name;
+  let nameEn = res.nameEn;
+  if (isSim) {
+    name += "（模擬延伸至成立前）";
+    nameEn += " (simulated, extended before inception)";
+  }
+  if (alloc) {
+    name += `（${alloc.risk}% ETF + ${alloc.cash}% 現金，每年 11/1 再平衡）`;
+    nameEn += ` (${alloc.risk}% ETF + ${alloc.cash}% cash, rebalanced every 11/1)`;
+  }
   return {
     ...res,
-    canonicalSymbol: `${res.canonicalSymbol}@sim`,
-    symbol: `${res.symbol}@sim`,
-    name: `${res.name}（模擬延伸至成立前）`,
-    nameEn: `${res.nameEn} (simulated, extended before inception)`,
+    canonicalSymbol: withVariantOf(rawSymbol, res.canonicalSymbol),
+    symbol: withVariantOf(rawSymbol, res.symbol),
+    name,
+    nameEn,
   };
 }
 
@@ -591,7 +625,14 @@ export async function lookupSymbol(rawSymbol: string): Promise<SymbolLookupResul
     };
   }
 
-  if (isSim && !getLeverageSpec(s)) {
+  const alloc = parseAllocation(rawSymbol);
+  const variantError =
+    (isSim || alloc) && !getLeverageSpec(s)
+      ? `「${s}」非槓桿型 ETF，不支援 @sim 模擬延伸或 @alo 資產配置調整。`
+      : alloc && !alloc.valid
+      ? `配置比例需合計 100%（例如 ${s}@alo(60:40)）。`
+      : null;
+  if (variantError) {
     return {
       found: false,
       symbol: rawSymbol.trim().toUpperCase(),
@@ -599,13 +640,13 @@ export async function lookupSymbol(rawSymbol: string): Promise<SymbolLookupResul
       name: "",
       nameEn: "",
       currency: "USD",
-      error: `「${s}」非槓桿型 ETF，不支援 @sim 模擬延伸計算。`,
+      error: variantError,
       channelsTried: [],
     };
   }
 
   const res = await doLookupSymbol(s, channelsTried);
-  return applySimVariant(res, isSim);
+  return applySimVariant(res, rawSymbol);
 }
 
 async function doLookupSymbol(s: string, channelsTried: string[]): Promise<SymbolLookupResult> {

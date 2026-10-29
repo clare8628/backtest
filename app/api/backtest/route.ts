@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
     );
     const unsimulatedCounterparts = new Set(
       results
-        .filter((s) => !isSimulatedSymbol(s.symbol) && simVariantBases.has(s.symbol.toUpperCase()))
+        .filter((s) => !isSimulatedSymbol(s.symbol) && simVariantBases.has(stripSimSuffix(s.symbol).toUpperCase()))
         .map((s) => s.symbol)
     );
 

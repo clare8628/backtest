@@ -3,7 +3,7 @@
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { t, Lang } from "@/lib/i18n";
 import { displaySymbol, findEntry, registerDynamicSymbol, searchCatalog, symbolLabel } from "@/lib/symbolCatalog";
-import { getLeverageSpec, isSimulatedSymbol, SIM_SUFFIX, stripSimSuffix } from "@/lib/leverageSim";
+import { DEFAULT_ALO_RISK, getLeverageSpec, isAllocationSymbol, isSimulatedSymbol, parseAllocation, stripSimSuffix, withVariantOf } from "@/lib/leverageSim";
 import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries, Currency } from "@/lib/types";
 import { loadGroups, upsertGroup, reorderGroups, deleteGroup, newGroupId } from "@/lib/storage";
 import PerformanceChart, { SimSettings } from "@/components/PerformanceChart";
@@ -238,16 +238,6 @@ function metricSections(
       ],
     },
     {
-      title: T.groupSource,
-      rows: [
-        {
-          label: T.volatilityDrag,
-          value: (m) => (m.volatilityDrag === undefined ? DASH : `-${m.volatilityDrag}%`),
-          color: () => "var(--negative)",
-        },
-      ],
-    },
-    {
       title: T.groupTrend,
       rows: [
         { label: T.trendR2, value: (m) => num(m.trendR2), color: (m) => trendColor(m.trendR2) },
@@ -257,6 +247,27 @@ function metricSections(
           label: T.gainPainRatio,
           value: (m) => num(m.gainPainRatio),
           color: (m) => trendColor(m.gainPainRatio, 1),
+        },
+      ],
+    },
+    {
+      title: T.groupLeverage,
+      rows: [
+        {
+          key: "arithmeticAnnualReturn",
+          label: T.arithmeticAnnualReturn,
+          value: (m) => pct(m.arithmeticAnnualReturn),
+        },
+        {
+          key: "volatilityDrag",
+          label: T.volatilityDrag,
+          value: (m) => (m.volatilityDrag === undefined ? DASH : `-${m.volatilityDrag}%`),
+          color: () => "var(--negative)",
+        },
+        {
+          key: "splitCount",
+          label: T.splitCount,
+          value: (m) => (m.splitCount === undefined ? DASH : String(m.splitCount)),
         },
       ],
     },
@@ -310,6 +321,16 @@ function metricSections(
       ],
     },
   ];
+}
+
+/** A bare "@alo" suggestion needs a cash ratio first: put an editable
+ *  "TQQQ@alo(60:40)" into the search box instead of adding it straight away. */
+function pickSuggestion(symbol: string, setText: (v: string) => void, add: (v: string) => void) {
+  if (isAllocationSymbol(symbol) && !/\(/.test(symbol)) {
+    setText(`${symbol}(${DEFAULT_ALO_RISK}:${100 - DEFAULT_ALO_RISK})`);
+    return;
+  }
+  add(symbol);
 }
 
 function MetricsTable({
@@ -496,15 +517,20 @@ export default function Home() {
 
   async function addSymbol(sym: string) {
     const isSim = isSimulatedSymbol(sym);
+    const alloc = parseAllocation(sym);
     const s = stripSimSuffix(sym).trim().toUpperCase();
     if (!s) return;
 
-    if (isSim && !getLeverageSpec(s)) {
+    if ((isSim || alloc) && !getLeverageSpec(s)) {
       alert(T.symbolSimNotSupported.replace("{symbol}", s));
       return;
     }
+    if (alloc && !alloc.valid) {
+      alert(T.allocationInvalid);
+      return;
+    }
 
-    const key = isSim ? `${s}${SIM_SUFFIX}` : s;
+    const key = withVariantOf(sym, s);
     if (draftSymbols.includes(key)) {
       alert(duplicateSymbolMessage(T, key));
       return;
@@ -520,11 +546,11 @@ export default function Home() {
     const known = findEntry(s);
     if (known) {
       const canonicalBase = known.symbol.toUpperCase();
-      if (isSim && !getLeverageSpec(canonicalBase)) {
+      if ((isSim || alloc) && !getLeverageSpec(canonicalBase)) {
         alert(T.symbolSimNotSupported.replace("{symbol}", canonicalBase));
         return;
       }
-      const canonicalKey = isSim ? `${canonicalBase}${SIM_SUFFIX}` : canonicalBase;
+      const canonicalKey = withVariantOf(sym, canonicalBase);
       if (!draftSymbols.includes(canonicalKey)) {
         setDraftSymbols([...draftSymbols, canonicalKey]);
       } else {
@@ -552,11 +578,11 @@ export default function Home() {
           category: data.category || "Stock",
         });
         const canonicalBase = data.canonicalSymbol.toUpperCase();
-        if (isSim && !getLeverageSpec(canonicalBase)) {
+        if ((isSim || alloc) && !getLeverageSpec(canonicalBase)) {
           alert(T.symbolSimNotSupported.replace("{symbol}", canonicalBase));
           return;
         }
-        const canonicalKey = isSim ? `${canonicalBase}${SIM_SUFFIX}` : canonicalBase;
+        const canonicalKey = withVariantOf(sym, canonicalBase);
         if (!draftSymbols.includes(canonicalKey)) {
           setDraftSymbols([...draftSymbols, canonicalKey]);
         } else {
@@ -791,15 +817,20 @@ export default function Home() {
 
   async function addSymbolToGroup(group: ComparisonGroup, sym: string) {
     const isSim = isSimulatedSymbol(sym);
+    const alloc = parseAllocation(sym);
     const s = stripSimSuffix(sym).trim().toUpperCase();
     if (!s) return;
 
-    if (isSim && !getLeverageSpec(s)) {
+    if ((isSim || alloc) && !getLeverageSpec(s)) {
       alert(T.symbolSimNotSupported.replace("{symbol}", s));
       return;
     }
+    if (alloc && !alloc.valid) {
+      alert(T.allocationInvalid);
+      return;
+    }
 
-    const key = isSim ? `${s}${SIM_SUFFIX}` : s;
+    const key = withVariantOf(sym, s);
     if (group.symbols.includes(key)) {
       alert(duplicateSymbolMessage(T, key));
       return;
@@ -814,11 +845,11 @@ export default function Home() {
     const known = findEntry(s);
     if (known) {
       const canonicalBase = known.symbol.toUpperCase();
-      if (isSim && !getLeverageSpec(canonicalBase)) {
+      if ((isSim || alloc) && !getLeverageSpec(canonicalBase)) {
         alert(T.symbolSimNotSupported.replace("{symbol}", canonicalBase));
         return;
       }
-      const canonicalKey = isSim ? `${canonicalBase}${SIM_SUFFIX}` : canonicalBase;
+      const canonicalKey = withVariantOf(sym, canonicalBase);
       if (!group.symbols.includes(canonicalKey)) {
         const updated = { ...group, symbols: [...group.symbols, canonicalKey], rangeFitted: false };
         updateGroup(updated, { rerun: true });
@@ -846,11 +877,11 @@ export default function Home() {
           category: data.category || "Stock",
         });
         const canonicalBase = data.canonicalSymbol.toUpperCase();
-        if (isSim && !getLeverageSpec(canonicalBase)) {
+        if ((isSim || alloc) && !getLeverageSpec(canonicalBase)) {
           alert(T.symbolSimNotSupported.replace("{symbol}", canonicalBase));
           return;
         }
-        const canonicalKey = isSim ? `${canonicalBase}${SIM_SUFFIX}` : canonicalBase;
+        const canonicalKey = withVariantOf(sym, canonicalBase);
         if (!group.symbols.includes(canonicalKey)) {
           const updated = { ...group, symbols: [...group.symbols, canonicalKey], rangeFitted: false };
           updateGroup(updated, { rerun: true });
@@ -1025,7 +1056,7 @@ export default function Home() {
                   {suggestions.map((s) => (
                     <li key={s.symbol}>
                       <button
-                        onClick={() => addSymbol(s.symbol)}
+                        onClick={() => pickSuggestion(s.symbol, setQuery, addSymbol)}
                         className="w-full text-left px-3 py-2 hover:opacity-80 text-sm flex justify-between"
                       >
                         <span className="font-medium">{s.symbol}</span>
@@ -1515,7 +1546,7 @@ export default function Home() {
                             {editSuggestions.map((s) => (
                               <li key={s.symbol}>
                                 <button
-                                  onClick={() => addSymbolToGroup(g, s.symbol)}
+                                  onClick={() => pickSuggestion(s.symbol, setEditQuery, (v) => addSymbolToGroup(g, v))}
                                   className="w-full text-left px-3 py-2 hover:opacity-80 text-sm flex justify-between"
                                 >
                                   <span className="font-medium">{s.symbol}</span>
