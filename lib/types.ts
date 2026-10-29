@@ -140,7 +140,7 @@ export interface ComparisonGroup {
   symbols: string[];
   createdAt: string;
   rangeYears: number;
-  startValue?: number; // 起點金額，預設 1000
+  startValue?: number; // 起點金額，預設 100
   /**
    * Whether `rangeYears` is a settled choice rather than the untouched default.
    * A group's first backtest snaps `rangeYears` up to the shared backtestable

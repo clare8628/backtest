@@ -78,16 +78,16 @@ describe("maxDrawdown", () => {
 });
 
 describe("computeMetrics", () => {
-  it("computes total return correctly for a simple doubling, defaulting to a 1000 start value", () => {
+  it("computes total return correctly for a simple doubling, defaulting to a 100 start value", () => {
     const m = computeMetrics({ symbol: "TEST", prices: series([100, 150, 200]) });
     expect(m.totalReturn).toBe(100);
-    expect(m.finalValue).toBe(2000);
+    expect(m.finalValue).toBe(200);
   });
 
   it("handles degenerate single-point series without throwing", () => {
     const m = computeMetrics({ symbol: "TEST", prices: series([100]) });
     expect(m.totalReturn).toBe(0);
-    expect(m.finalValue).toBe(1000);
+    expect(m.finalValue).toBe(100);
   });
 
   it("scales the final value with a custom start value", () => {
@@ -723,20 +723,6 @@ describe("catalog entry for VGLT", () => {
   });
 });
 
-describe("searchCatalog with a leveraged ETF prefix", () => {
-  it("lists the fund's @sim simulated-extension entry right after it", () => {
-    const results = searchCatalog("TQQ");
-    const tqqqIdx = results.findIndex((r) => r.symbol === "TQQQ");
-    expect(tqqqIdx).toBeGreaterThanOrEqual(0);
-    expect(results[tqqqIdx + 1]?.symbol).toBe("TQQQ@sim");
-  });
-
-  it("does not add a @sim entry for funds with no leverage spec", () => {
-    const results = searchCatalog("vglt");
-    expect(results.some((r) => r.symbol.endsWith("@sim"))).toBe(false);
-  });
-});
-
 describe("simulateWithdrawnSeries", () => {
   it("calculates initial withdrawal and annual inflation-adjusted withdrawals", () => {
     // 兩年資料：2023年與2024年，股價持平為 100
@@ -1110,24 +1096,73 @@ describe("catalog expense ratio completeness [BAC-11]", () => {
   });
 });
 
+describe("searchCatalog with a leveraged ETF prefix", () => {
+  it("lists the fund's @sim simulated-extension entry right after it", () => {
+    const results = searchCatalog("TQQ");
+    const tqqqIdx = results.findIndex((r) => r.symbol === "TQQQ");
+    expect(tqqqIdx).toBeGreaterThanOrEqual(0);
+    expect(results[tqqqIdx + 1]?.symbol).toBe("TQQQ@sim");
+  });
+
+  it("finds the ETF even when query includes @sim", () => {
+    const results = searchCatalog("TQQQ@sim");
+    expect(results.some((r) => r.symbol === "TQQQ@sim")).toBe(true);
+    expect(results.some((r) => r.symbol === "TQQQ")).toBe(true);
+  });
+
+  it("does not add a @sim entry for funds with no leverage spec", () => {
+    const results = searchCatalog("vglt");
+    expect(results.some((r) => r.symbol.endsWith("@sim"))).toBe(false);
+  });
+});
+
 describe("commonWindow", () => {
   const sim: SymbolSeries = {
-    symbol: "TQQQ",
+    symbol: "TQQQ@sim",
     prices: [
       { date: "1999-03-11", close: 10 },
       { date: "2026-01-01", close: 500 },
     ],
   };
-  const other: SymbolSeries = {
-    symbol: "QQQ",
+  const real: SymbolSeries = {
+    symbol: "TQQQ",
     prices: [
       { date: "2010-02-12", close: 1 },
       { date: "2026-01-01", close: 90 },
     ],
   };
+  const qqq: SymbolSeries = {
+    symbol: "QQQ",
+    prices: [
+      { date: "1999-03-11", close: 50 },
+      { date: "2026-01-01", close: 400 },
+    ],
+  };
 
   it("pegs the start to the latest-starting series and the end to the earliest-ending one", () => {
-    expect(commonWindow([sim, other])).toEqual({ start: "2010-02-12", end: "2026-01-01" });
+    expect(commonWindow([sim, real, qqq])).toEqual({ start: "2010-02-12", end: "2026-01-01" });
+  });
+
+  it("ignores an unsimulated counterpart's start when excluded, allowing side-by-side comparison with simulated history", () => {
+    expect(commonWindow([sim, real, qqq], new Set(["TQQQ"]))).toEqual({
+      start: "1999-03-11",
+      end: "2026-01-01",
+    });
+  });
+
+  it("still uses the excluded series for the end date", () => {
+    const shortEnd: SymbolSeries = { ...real, prices: [real.prices[0], { date: "2020-01-01", close: 5 }] };
+    expect(commonWindow([sim, shortEnd, qqq], new Set(["TQQQ"]))).toEqual({
+      start: "1999-03-11",
+      end: "2020-01-01",
+    });
+  });
+
+  it("falls back to every series when all of them are excluded", () => {
+    expect(commonWindow([real], new Set(["TQQQ"]))).toEqual({
+      start: "2010-02-12",
+      end: "2026-01-01",
+    });
   });
 });
 

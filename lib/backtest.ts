@@ -118,12 +118,12 @@ export function maxDrawdown(prices: PricePoint[]): number {
 }
 
 /** Core backtest computation for a single symbol's price series.
- *  `startValue` is the hypothetical initial investment amount (defaults to 1000).
+ *  `startValue` is the hypothetical initial investment amount (defaults to 100).
  *  `marketReturns` is the date-aligned daily return series for the market
  *  benchmark (SPY); pass undefined/empty if unavailable — Beta will be null. */
 export function computeMetrics(
   series: SymbolSeries,
-  startValue = 1000,
+  startValue = 100,
   marketReturns: { date: string; value: number }[] = []
 ): BacktestMetrics {
   const { prices } = series;
@@ -444,12 +444,18 @@ export function seriesYears(prices: PricePoint[]): number {
  * empty (nothing to align).
  */
 export function commonWindow(
-  seriesList: SymbolSeries[]
+  seriesList: SymbolSeries[],
+  excludeFromStart?: Set<string>
 ): { start: string; end: string } | null {
   const withData = seriesList.filter((s) => s.prices.length > 0);
   if (withData.length === 0) return null;
-  let start = withData[0].prices[0].date;
-  for (const s of withData) {
+  const eligibleForStart =
+    excludeFromStart && excludeFromStart.size > 0
+      ? withData.filter((s) => !excludeFromStart.has(s.symbol))
+      : withData;
+  const startPool = eligibleForStart.length > 0 ? eligibleForStart : withData;
+  let start = startPool[0].prices[0].date;
+  for (const s of startPool) {
     const first = s.prices[0].date;
     if (first > start) start = first;
   }

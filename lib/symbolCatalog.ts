@@ -1,4 +1,4 @@
-import { getLeverageSpec, SIM_SUFFIX, stripSimSuffix } from "./leverageSim";
+import { getLeverageSpec, isSimulatedSymbol, SIM_SUFFIX, stripSimSuffix } from "./leverageSim";
 import { Currency } from "./types";
 
 export interface CatalogEntry {
@@ -364,7 +364,9 @@ export function findEntry(symbol: string): CatalogEntry | undefined {
     DYNAMIC_CATALOG.get(key) ||
     DYNAMIC_CATALOG.get(`${key}.TW`) ||
     DYNAMIC_CATALOG.get(`${key}.TWO`) ||
-    SYMBOL_CATALOG.find((e) => e.symbol.toUpperCase() === key)
+    SYMBOL_CATALOG.find((e) => e.symbol.toUpperCase() === key) ||
+    SYMBOL_CATALOG.find((e) => e.symbol.toUpperCase() === `${key}.TW`) ||
+    SYMBOL_CATALOG.find((e) => e.symbol.toUpperCase() === `${key}.TWO`)
   );
 }
 
@@ -438,8 +440,9 @@ export function symbolLabel(
   lang: "zh" | "en" = "zh",
   simulated = false
 ): { code: string; name?: string } {
+  const hasSimSuffix = isSimulatedSymbol(symbol);
   const trimmed = stripSimSuffix(symbol).trim();
-  const tag = simulated ? SIM_SUFFIX : "";
+  const tag = simulated || hasSimSuffix ? SIM_SUFFIX : "";
   if (!TW_SUFFIX.test(trimmed)) return { code: trimmed + tag };
   const entry = findEntry(trimmed);
   if (!entry) return { code: trimmed + tag };
@@ -539,11 +542,22 @@ function simSuggestionFor(e: CatalogEntry): CatalogEntry {
 
 export function searchCatalog(query: string): CatalogEntry[] {
   const q = query.trim().toLowerCase();
+  const qClean = stripSimSuffix(query).trim().toLowerCase();
   const allEntries = [...Array.from(DYNAMIC_CATALOG.values()), ...SYMBOL_CATALOG];
   const matched = !q
     ? allEntries.slice(0, 8)
     : allEntries
-        .map((e) => ({ e, rank: matchRank(e, q) }))
+        .map((e) => {
+          const rankRaw = matchRank(e, q);
+          const rankClean = qClean && qClean !== q ? matchRank(e, qClean) : -1;
+          const bestRank =
+            rankRaw >= 0 && rankClean >= 0
+              ? Math.min(rankRaw, rankClean)
+              : rankRaw >= 0
+              ? rankRaw
+              : rankClean;
+          return { e, rank: bestRank };
+        })
         .filter(({ rank }) => rank >= 0)
         .sort((a, b) => a.rank - b.rank)
         .slice(0, 8)

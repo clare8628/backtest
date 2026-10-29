@@ -3,7 +3,7 @@
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { t, Lang } from "@/lib/i18n";
 import { displaySymbol, findEntry, registerDynamicSymbol, searchCatalog, symbolLabel } from "@/lib/symbolCatalog";
-import { stripSimSuffix } from "@/lib/leverageSim";
+import { getLeverageSpec, isSimulatedSymbol, SIM_SUFFIX, stripSimSuffix } from "@/lib/leverageSim";
 import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries, Currency } from "@/lib/types";
 import { loadGroups, upsertGroup, reorderGroups, deleteGroup, newGroupId } from "@/lib/storage";
 import PerformanceChart, { SimSettings } from "@/components/PerformanceChart";
@@ -296,7 +296,7 @@ function MetricsTable({
   T,
   lang,
   chartSeries,
-  startValue = 1000,
+  startValue = 100,
   simSettings,
 }: {
   metrics: BacktestMetrics[];
@@ -422,7 +422,7 @@ export default function Home() {
   const [draftSymbols, setDraftSymbols] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [rangeYears, setRangeYears] = useState(DEFAULT_RANGE_YEARS);
-  const [startValue, setStartValue] = useState(1000);
+  const [startValue, setStartValue] = useState(100);
 
   const [results, setResults] = useState<Record<string, BacktestResult>>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -468,11 +468,18 @@ export default function Home() {
   const [refreshSuccessGroupId, setRefreshSuccessGroupId] = useState<string | null>(null);
 
   async function addSymbol(sym: string) {
+    const isSim = isSimulatedSymbol(sym);
     const s = stripSimSuffix(sym).trim().toUpperCase();
     if (!s) return;
-    const hadSuffix = s !== sym.trim().toUpperCase();
-    if (draftSymbols.includes(s)) {
-      if (hadSuffix) alert(duplicateSymbolMessage(T, s));
+
+    if (isSim && !getLeverageSpec(s)) {
+      alert(T.symbolSimNotSupported.replace("{symbol}", s));
+      return;
+    }
+
+    const key = isSim ? `${s}${SIM_SUFFIX}` : s;
+    if (draftSymbols.includes(key)) {
+      alert(duplicateSymbolMessage(T, key));
       return;
     }
     if (draftSymbols.length >= MAX_SYMBOLS_PER_GROUP) {
@@ -485,11 +492,16 @@ export default function Home() {
     // If known in catalog, add immediately
     const known = findEntry(s);
     if (known) {
-      const canonical = known.symbol.toUpperCase();
-      if (!draftSymbols.includes(canonical)) {
-        setDraftSymbols([...draftSymbols, canonical]);
-      } else if (hadSuffix) {
-        alert(duplicateSymbolMessage(T, canonical));
+      const canonicalBase = known.symbol.toUpperCase();
+      if (isSim && !getLeverageSpec(canonicalBase)) {
+        alert(T.symbolSimNotSupported.replace("{symbol}", canonicalBase));
+        return;
+      }
+      const canonicalKey = isSim ? `${canonicalBase}${SIM_SUFFIX}` : canonicalBase;
+      if (!draftSymbols.includes(canonicalKey)) {
+        setDraftSymbols([...draftSymbols, canonicalKey]);
+      } else {
+        alert(duplicateSymbolMessage(T, canonicalKey));
       }
       setQuery("");
       return;
@@ -512,11 +524,16 @@ export default function Home() {
           nameEn: data.nameEn,
           category: data.category || "Stock",
         });
-        const canonical = data.canonicalSymbol.toUpperCase();
-        if (!draftSymbols.includes(canonical)) {
-          setDraftSymbols([...draftSymbols, canonical]);
-        } else if (hadSuffix) {
-          alert(duplicateSymbolMessage(T, canonical));
+        const canonicalBase = data.canonicalSymbol.toUpperCase();
+        if (isSim && !getLeverageSpec(canonicalBase)) {
+          alert(T.symbolSimNotSupported.replace("{symbol}", canonicalBase));
+          return;
+        }
+        const canonicalKey = isSim ? `${canonicalBase}${SIM_SUFFIX}` : canonicalBase;
+        if (!draftSymbols.includes(canonicalKey)) {
+          setDraftSymbols([...draftSymbols, canonicalKey]);
+        } else {
+          alert(duplicateSymbolMessage(T, canonicalKey));
         }
         setQuery("");
       } else {
@@ -544,7 +561,7 @@ export default function Home() {
         body: JSON.stringify({
           symbols: group.symbols,
           rangeYears: group.rangeYears,
-          startValue: group.startValue ?? 1000,
+          startValue: group.startValue ?? 100,
           forceRefresh: options?.forceRefresh ?? false,
         }),
       });
@@ -621,7 +638,21 @@ export default function Home() {
    * For a brand-new group (!rangeFitted), it snaps directly to this ceiling.
    */
   function maybeAutoFitRange(group: ComparisonGroup, data: BacktestResult) {
-    const ceilings = (data.metrics ?? [])
+    const simVariantBases = new Set(
+      (data.metrics ?? [])
+        .filter((m) => isSimulatedSymbol(m.symbol))
+        .map((m) => stripSimSuffix(m.symbol).toUpperCase())
+    );
+    const unsimulatedCounterparts = new Set(
+      (data.metrics ?? [])
+        .filter((m) => !isSimulatedSymbol(m.symbol) && simVariantBases.has(m.symbol.toUpperCase()))
+        .map((m) => m.symbol)
+    );
+    const candidateMetrics = (data.metrics ?? []).filter(
+      (m) => !unsimulatedCounterparts.has(m.symbol)
+    );
+    const pool = candidateMetrics.length > 0 ? candidateMetrics : data.metrics ?? [];
+    const ceilings = pool
       .map((m) => m.maxBacktestYears)
       .filter((y): y is number => typeof y === "number" && y > 0);
     if (ceilings.length === 0) return; // every symbol errored — try again next run
@@ -666,7 +697,7 @@ export default function Home() {
       setGroups(updated);
       setDraftTitle("");
       setDraftSymbols([]);
-      setStartValue(1000);
+      setStartValue(100);
       setExpandedWithUrl(group.id);
       runBacktest(group);
     });
@@ -703,11 +734,18 @@ export default function Home() {
   }
 
   async function addSymbolToGroup(group: ComparisonGroup, sym: string) {
+    const isSim = isSimulatedSymbol(sym);
     const s = stripSimSuffix(sym).trim().toUpperCase();
     if (!s) return;
-    const hadSuffix = s !== sym.trim().toUpperCase();
-    if (group.symbols.includes(s)) {
-      if (hadSuffix) alert(duplicateSymbolMessage(T, s));
+
+    if (isSim && !getLeverageSpec(s)) {
+      alert(T.symbolSimNotSupported.replace("{symbol}", s));
+      return;
+    }
+
+    const key = isSim ? `${s}${SIM_SUFFIX}` : s;
+    if (group.symbols.includes(key)) {
+      alert(duplicateSymbolMessage(T, key));
       return;
     }
     if (group.symbols.length >= MAX_SYMBOLS_PER_GROUP) {
@@ -719,12 +757,17 @@ export default function Home() {
 
     const known = findEntry(s);
     if (known) {
-      const canonical = known.symbol.toUpperCase();
-      if (!group.symbols.includes(canonical)) {
-        const updated = { ...group, symbols: [...group.symbols, canonical], rangeFitted: false };
+      const canonicalBase = known.symbol.toUpperCase();
+      if (isSim && !getLeverageSpec(canonicalBase)) {
+        alert(T.symbolSimNotSupported.replace("{symbol}", canonicalBase));
+        return;
+      }
+      const canonicalKey = isSim ? `${canonicalBase}${SIM_SUFFIX}` : canonicalBase;
+      if (!group.symbols.includes(canonicalKey)) {
+        const updated = { ...group, symbols: [...group.symbols, canonicalKey], rangeFitted: false };
         updateGroup(updated, { rerun: true });
-      } else if (hadSuffix) {
-        alert(duplicateSymbolMessage(T, canonical));
+      } else {
+        alert(duplicateSymbolMessage(T, canonicalKey));
       }
       setEditQuery("");
       return;
@@ -746,12 +789,17 @@ export default function Home() {
           nameEn: data.nameEn,
           category: data.category || "Stock",
         });
-        const canonical = data.canonicalSymbol.toUpperCase();
-        if (!group.symbols.includes(canonical)) {
-          const updated = { ...group, symbols: [...group.symbols, canonical], rangeFitted: false };
+        const canonicalBase = data.canonicalSymbol.toUpperCase();
+        if (isSim && !getLeverageSpec(canonicalBase)) {
+          alert(T.symbolSimNotSupported.replace("{symbol}", canonicalBase));
+          return;
+        }
+        const canonicalKey = isSim ? `${canonicalBase}${SIM_SUFFIX}` : canonicalBase;
+        if (!group.symbols.includes(canonicalKey)) {
+          const updated = { ...group, symbols: [...group.symbols, canonicalKey], rangeFitted: false };
           updateGroup(updated, { rerun: true });
-        } else if (hadSuffix) {
-          alert(duplicateSymbolMessage(T, canonical));
+        } else {
+          alert(duplicateSymbolMessage(T, canonicalKey));
         }
         setEditQuery("");
       } else {
@@ -1447,7 +1495,7 @@ export default function Home() {
                   />
                   <NumberField
                     label={T.startValue}
-                    value={g.startValue ?? 1000}
+                    value={g.startValue ?? 100}
                     onCommit={(v) => changeGroupStartValue(g, v)}
                     min={1}
                     step={100}
@@ -1517,7 +1565,7 @@ export default function Home() {
                             T={T}
                             lang={lang}
                             chartSeries={result.chartSeries}
-                            startValue={g.startValue ?? 1000}
+                            startValue={g.startValue ?? 100}
                             simSettings={simSettingsMap[g.id] ?? { enabled: false, withdrawalRate: 3, inflationRate: 3 }}
                           />
                         </div>

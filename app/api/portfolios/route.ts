@@ -81,7 +81,7 @@ export async function GET() {
       symbols: JSON.parse((row.symbols as string) || "[]"),
       rangeYears: Number(row.rangeYears) || 5,
       createdAt: String(row.createdAt ?? ""),
-      startValue: Number(row.startValue) || 1000,
+      startValue: Number(row.startValue) || 100,
       // Rows that predate this column read back as 0, so on first load every
       // existing group gets auto-fitted to its shortest symbol's history — the
       // behaviour asked for. After that the client sets this (auto-fit ran, or
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
         .prepare(
           "UPDATE portfolios SET title = ?, symbols = ?, rangeYears = ?, startValue = ?, rangeFitted = ?, sortOrder = ?, updatedAt = ? WHERE id = ?"
         )
-        .bind(title, symbolsJson, rangeYears, startValue || 1000, rangeFitted ? 1 : 0, order, now, id)
+        .bind(title, symbolsJson, rangeYears, startValue || 100, rangeFitted ? 1 : 0, order, now, id)
         .run();
     } else {
       await db
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
           title,
           symbolsJson,
           rangeYears,
-          startValue || 1000,
+          startValue || 100,
           rangeFitted ? 1 : 0,
           order,
           createdAt || now,

@@ -18,6 +18,10 @@ export interface LeverageSpec {
 
 export const SIM_SUFFIX = "@sim";
 
+export function isSimulatedSymbol(symbol: string): boolean {
+  return symbol.trim().toUpperCase().endsWith(SIM_SUFFIX.toUpperCase());
+}
+
 /**
  * Users may type the displayed "@sim" suffix back into a symbol search box
  * (e.g. copying "TQQQ@sim" from the legend). The suffix is a display-only
@@ -31,6 +35,17 @@ export function stripSimSuffix(symbol: string): string {
   return s;
 }
 
+export function simVariantSymbol(symbol: string): string {
+  const base = stripSimSuffix(symbol).trim().toUpperCase();
+  return `${base}${SIM_SUFFIX}`;
+}
+
+export function parseSymbolVariant(symbol: string): { base: string; isSim: boolean } {
+  const isSim = isSimulatedSymbol(symbol);
+  const base = stripSimSuffix(symbol).trim().toUpperCase();
+  return { base, isSim };
+}
+
 const SIM_SPECS: Record<string, LeverageSpec> = {
   TQQQ: { underlying: "QQQ", leverage: 3, expenseRatio: 0.86, financingRate: 3 },
   QLD: { underlying: "QQQ", leverage: 2, expenseRatio: 0.95, financingRate: 3 },
@@ -42,7 +57,13 @@ const SIM_SPECS: Record<string, LeverageSpec> = {
 };
 
 export function getLeverageSpec(symbol: string): LeverageSpec | null {
-  return SIM_SPECS[symbol.trim().toUpperCase()] ?? null;
+  const bare = stripSimSuffix(symbol).trim().toUpperCase();
+  return (
+    SIM_SPECS[bare] ??
+    SIM_SPECS[`${bare}.TW`] ??
+    SIM_SPECS[`${bare}.TWO`] ??
+    null
+  );
 }
 
 const TRADING_DAYS = 252;

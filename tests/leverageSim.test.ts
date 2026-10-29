@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { getLeverageSpec, simulatePrefix, stripSimSuffix } from "@/lib/leverageSim";
+import {
+  getLeverageSpec,
+  isSimulatedSymbol,
+  parseSymbolVariant,
+  simulatePrefix,
+  stripSimSuffix,
+} from "@/lib/leverageSim";
 import { symbolLabel } from "@/lib/symbolCatalog";
 
 const spec = { underlying: "QQQ", leverage: 3, expenseRatio: 0, financingRate: 0 };
@@ -40,15 +46,37 @@ describe("simulatePrefix", () => {
 describe("leverage specs & labels", () => {
   it("maps TQQQ/SPXL/00631L to their underlyings", () => {
     expect(getLeverageSpec("tqqq")?.underlying).toBe("QQQ");
+    expect(getLeverageSpec("TQQQ@sim")?.underlying).toBe("QQQ");
     expect(getLeverageSpec("SPXL")?.underlying).toBe("SPY");
     expect(getLeverageSpec("00631L.TW")?.underlying).toBe("0050.TW");
+    expect(getLeverageSpec("00631L")?.underlying).toBe("0050.TW");
+    expect(getLeverageSpec("00631L.TW@sim")?.underlying).toBe("0050.TW");
     expect(getLeverageSpec("QQQ")).toBeNull();
   });
 
-  it("appends @sim to the label", () => {
+  it("appends @sim to the label when simulated or tagged", () => {
     expect(symbolLabel("TQQQ", "zh", true).code).toBe("TQQQ@sim");
+    expect(symbolLabel("TQQQ@sim").code).toBe("TQQQ@sim");
     expect(symbolLabel("00631L.TW", "zh", true).code).toBe("00631L@sim");
+    expect(symbolLabel("00631L.TW@sim").code).toBe("00631L@sim");
     expect(symbolLabel("TQQQ").code).toBe("TQQQ");
+    expect(symbolLabel("00631L.TW").code).toBe("00631L");
+  });
+});
+
+describe("isSimulatedSymbol & parseSymbolVariant", () => {
+  it("correctly identifies @sim symbols", () => {
+    expect(isSimulatedSymbol("TQQQ@sim")).toBe(true);
+    expect(isSimulatedSymbol("TQQQ@SIM")).toBe(true);
+    expect(isSimulatedSymbol("00631L.TW@sim")).toBe(true);
+    expect(isSimulatedSymbol("TQQQ")).toBe(false);
+    expect(isSimulatedSymbol("QQQ")).toBe(false);
+  });
+
+  it("parses base and isSim variant", () => {
+    expect(parseSymbolVariant("TQQQ@sim")).toEqual({ base: "TQQQ", isSim: true });
+    expect(parseSymbolVariant("TQQQ")).toEqual({ base: "TQQQ", isSim: false });
+    expect(parseSymbolVariant("00631L.TW@sim")).toEqual({ base: "00631L.TW", isSim: true });
   });
 });
 

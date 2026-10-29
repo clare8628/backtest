@@ -1,6 +1,6 @@
 import { Currency, DividendEvent, PricePoint, SplitEvent, SymbolSeries } from "./types";
 import { findEntry } from "./symbolCatalog";
-import { getLeverageSpec, simulatePrefix, stripSimSuffix } from "./leverageSim";
+import { getLeverageSpec, isSimulatedSymbol, simulatePrefix, stripSimSuffix } from "./leverageSim";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -42,9 +42,15 @@ export async function fetchDailyPrices(
   rangeYears = 5,
   forceRefresh = false
 ): Promise<SymbolSeries> {
+  const isSim = isSimulatedSymbol(symbol);
   const base = stripSimSuffix(symbol);
   const series = await fetchRealDailyPrices(base, rangeYears, forceRefresh);
-  return extendWithSimulation(series, rangeYears, forceRefresh);
+  const canonicalSym = symbol.trim().toUpperCase();
+  if (!isSim) {
+    return { ...series, symbol: canonicalSym };
+  }
+  const extended = await extendWithSimulation(series, rangeYears, forceRefresh);
+  return { ...extended, symbol: canonicalSym };
 }
 
 /**
@@ -552,11 +558,23 @@ async function lookupTaiwanOpenApi(rawSymbol: string): Promise<SymbolLookupResul
   return null;
 }
 
+function applySimVariant(res: SymbolLookupResult, isSim: boolean): SymbolLookupResult {
+  if (!isSim || !res.found) return res;
+  return {
+    ...res,
+    canonicalSymbol: `${res.canonicalSymbol}@sim`,
+    symbol: `${res.symbol}@sim`,
+    name: `${res.name}（模擬延伸至成立前）`,
+    nameEn: `${res.nameEn} (simulated, extended before inception)`,
+  };
+}
+
 /**
  * Validates and looks up a symbol across multiple live channels.
  * Returns metadata including canonical symbol, name, currency, latest price, and channel used.
  */
 export async function lookupSymbol(rawSymbol: string): Promise<SymbolLookupResult> {
+  const isSim = isSimulatedSymbol(rawSymbol);
   const s = stripSimSuffix(rawSymbol).trim().toUpperCase();
   const channelsTried: string[] = [];
 
@@ -572,6 +590,25 @@ export async function lookupSymbol(rawSymbol: string): Promise<SymbolLookupResul
       channelsTried,
     };
   }
+
+  if (isSim && !getLeverageSpec(s)) {
+    return {
+      found: false,
+      symbol: rawSymbol.trim().toUpperCase(),
+      canonicalSymbol: rawSymbol.trim().toUpperCase(),
+      name: "",
+      nameEn: "",
+      currency: "USD",
+      error: `「${s}」非槓桿型 ETF，不支援 @sim 模擬延伸計算。`,
+      channelsTried: [],
+    };
+  }
+
+  const res = await doLookupSymbol(s, channelsTried);
+  return applySimVariant(res, isSim);
+}
+
+async function doLookupSymbol(s: string, channelsTried: string[]): Promise<SymbolLookupResult> {
 
   // 0. Check internal catalog
   const catalogEntry = findEntry(s);

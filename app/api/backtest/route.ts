@@ -21,6 +21,7 @@ import {
   hasKnownManagementFee,
   nativeCurrencyOf,
 } from "@/lib/symbolCatalog";
+import { isSimulatedSymbol, stripSimSuffix } from "@/lib/leverageSim";
 
 // A Taiwan-listed fund's daily correlation to the US market isn't a meaningful
 // "Beta" for it, so each symbol is measured against its own market's benchmark:
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
     const symbols: string[] = Array.isArray(body?.symbols) ? body.symbols : [];
     const rangeYears: number = typeof body?.rangeYears === "number" ? body.rangeYears : 5;
     const startValue: number =
-      typeof body?.startValue === "number" && body.startValue > 0 ? body.startValue : 1000;
+      typeof body?.startValue === "number" && body.startValue > 0 ? body.startValue : 100;
 
     const forceRefresh: boolean = Boolean(body?.forceRefresh);
 
@@ -108,23 +109,41 @@ export async function POST(req: NextRequest) {
     const windowedYears: Record<string, number> = {};
     for (const s of results) windowedYears[s.symbol] = seriesYears(s.prices);
 
+    // When a group contains both a simulated series (e.g. TQQQ@sim) and its
+    // un-simulated counterpart (e.g. TQQQ), the un-simulated series is present
+    // specifically to compare real vs simulated side by side. It has less history
+    // by design and must not drag the whole group's shared start forward to its
+    // own later real inception, otherwise the simulated stretch of TQQQ@sim
+    // would be aligned away.
+    const simVariantBases = new Set(
+      results
+        .filter((s) => isSimulatedSymbol(s.symbol))
+        .map((s) => stripSimSuffix(s.symbol).toUpperCase())
+    );
+    const unsimulatedCounterparts = new Set(
+      results
+        .filter((s) => !isSimulatedSymbol(s.symbol) && simVariantBases.has(s.symbol.toUpperCase()))
+        .map((s) => s.symbol)
+    );
+
     // Auto-align the whole group to the overlapping window shared by every
     // symbol, pegged to whichever one has the shortest available history, so
     // headline metrics never silently span different eras across symbols.
-    const window = commonWindow(results);
+    const window = commonWindow(results, unsimulatedCounterparts);
     const alignedResults = window
       ? results.map((s) => ({ ...s, prices: trimToWindow(s.prices, window) }))
       : results;
 
-    const yearsValues = results.map((s) => windowedYears[s.symbol]);
+    const constraintCandidates = results.filter((s) => !unsimulatedCounterparts.has(s.symbol));
+    const yearsValues = constraintCandidates.map((s) => windowedYears[s.symbol]);
     const minYears = yearsValues.length > 0 ? Math.min(...yearsValues) : 0;
     const maxYears = yearsValues.length > 0 ? Math.max(...yearsValues) : 0;
     // Only call out a "constraint" when history lengths actually differ —
     // if every symbol already covers the full requested range there's nothing
     // to explain.
     const constrainedBy =
-      results.length > 1 && maxYears - minYears > 0.05
-        ? results.find((s) => windowedYears[s.symbol] === minYears)?.symbol ?? null
+      constraintCandidates.length > 1 && maxYears - minYears > 0.05
+        ? constraintCandidates.find((s) => windowedYears[s.symbol] === minYears)?.symbol ?? null
         : null;
 
     // Fetch whichever benchmark(s) the group's symbols need, reusing an
@@ -189,7 +208,7 @@ export async function POST(req: NextRequest) {
       return {
         ...m,
         benchmarkSymbol,
-        simulated: usesSimulation(s),
+        simulated: isSimulatedSymbol(s.symbol) && usesSimulation(s),
         maxBacktestYears: round2(maxBacktestYears[s.symbol] ?? 0),
         trendR2: trend.trendR2 === null ? null : round2(trend.trendR2),
         newHighMonthPct: trend.newHighMonthPct === null ? null : round2(trend.newHighMonthPct),
@@ -233,7 +252,7 @@ export async function POST(req: NextRequest) {
         const priceTWD = currency === "TWD" ? p.close : rate !== null ? round2(p.close * rate) : null;
         return { date: p.date, priceUSD, priceTWD };
       });
-      return { symbol: s.symbol, currency, points, simulated: usesSimulation(s), splits: windowSplits };
+      return { symbol: s.symbol, currency, points, simulated: isSimulatedSymbol(s.symbol) && usesSimulation(s), splits: windowSplits };
     });
 
     return NextResponse.json({
