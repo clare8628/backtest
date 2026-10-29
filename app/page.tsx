@@ -154,8 +154,7 @@ function metricSections(
   T: Dict,
   lang: Lang,
   withdrawnValues?: Record<string, { value: number; depletedDate: string | null }>,
-  simSettings?: SimSettings,
-  onEnableSim?: () => void
+  simSettings?: SimSettings
 ): { title: string; rows: MetricRow[] }[] {
   const wRate = simSettings?.withdrawalRate ?? 3;
   const iRate = simSettings?.inflationRate ?? 3;
@@ -196,19 +195,6 @@ function metricSections(
                       ({T.depletedAt} {year})
                     </span>
                   </span>
-                  {onEnableSim && !simSettings?.enabled && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEnableSim();
-                      }}
-                      className="text-[10px] text-[var(--orchid-ink)] underline hover:opacity-80 transition-opacity cursor-pointer font-normal"
-                      title={T.viewWithdrawalCurveTooltip}
-                    >
-                      {T.viewWithdrawalCurve}
-                    </button>
-                  )}
                 </div>
               );
             }
@@ -333,7 +319,6 @@ function MetricsTable({
   chartSeries,
   startValue = 100,
   simSettings,
-  onEnableSim,
 }: {
   metrics: BacktestMetrics[];
   T: Dict;
@@ -341,7 +326,6 @@ function MetricsTable({
   chartSeries?: ChartSeries[];
   startValue?: number;
   simSettings?: SimSettings;
-  onEnableSim?: () => void;
 }) {
   const effectiveSim = simSettings ?? { enabled: false, withdrawalRate: 3, inflationRate: 3 };
 
@@ -373,7 +357,7 @@ function MetricsTable({
     return res;
   }, [chartSeries, startValue, effectiveSim.withdrawalRate, effectiveSim.inflationRate]);
 
-  const sections = metricSections(T, lang, withdrawnValues, simSettings, onEnableSim);
+  const sections = metricSections(T, lang, withdrawnValues, simSettings);
   const sortedMetrics = useMemo(() => {
     return [...metrics].sort((a, b) => (b.totalReturn ?? 0) - (a.totalReturn ?? 0));
   }, [metrics]);
@@ -1695,15 +1679,6 @@ export default function Home() {
                             chartSeries={result.chartSeries}
                             startValue={g.startValue ?? 100}
                             simSettings={simSettingsMap[g.id] ?? { enabled: false, withdrawalRate: 3, inflationRate: 3 }}
-                            onEnableSim={() =>
-                              setSimSettingsMap((prev) => ({
-                                ...prev,
-                                [g.id]: {
-                                  ...(prev[g.id] ?? { withdrawalRate: 3, inflationRate: 3 }),
-                                  enabled: true,
-                                },
-                              }))
-                            }
                           />
                         </div>
                         <Note title={T.withdrawalSimVsBuyHoldTitle} body={T.withdrawalSimVsBuyHoldText} />

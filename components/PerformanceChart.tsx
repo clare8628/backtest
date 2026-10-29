@@ -102,6 +102,16 @@ export interface VisibleSplit {
   point: PlottedPoint | null;
 }
 
+export interface DepletionEvent {
+  symbol: string;
+  seriesIndex: number;
+  color: string;
+  depletedDate: string; // ISO date
+  year: number;
+  t: number;
+  point: PlottedPoint | null;
+}
+
 function priceOf(currency: Currency, p: { priceUSD: number | null; priceTWD: number | null }): number | null {
   return currency === "USD" ? p.priceUSD : p.priceTWD;
 }
@@ -164,6 +174,10 @@ export default function PerformanceChart({
   // 股票分割標註開關與 Hover 狀態
   const [showSplits, setShowSplits] = useState<boolean>(true);
   const [hoveredSplitKey, setHoveredSplitKey] = useState<string | null>(null);
+
+  // 提領耗盡重大事件標註開關與 Hover 狀態 (比照股票分割與重大事件)
+  const [showDepletions, setShowDepletions] = useState<boolean>(true);
+  const [hoveredDepletionKey, setHoveredDepletionKey] = useState<string | null>(null);
 
   // 退休提領模擬設定
   const [localSimEnabled, setLocalSimEnabled] = useState<boolean>(false);
@@ -366,6 +380,48 @@ export default function PerformanceChart({
     return deduped.sort((a, b) => a.t - b.t);
   }, [plotted, tMin, tMax]);
 
+  // 範圍內各標的之提領耗盡重大事件（比照股票分割與重大事件計算）
+  const depletionEvents = useMemo<DepletionEvent[]>(() => {
+    const list: DepletionEvent[] = [];
+    plotted.forEach((s, idx) => {
+      const color = SERIES_COLORS[idx % SERIES_COLORS.length];
+      if (s.points.length === 0) return;
+      const sim = simulateWithdrawnSeries(
+        s.points,
+        s.points[0]?.value ?? 0,
+        withdrawalRate,
+        inflationRate
+      );
+      if (sim.depletedDate) {
+        const t = new Date(sim.depletedDate).getTime();
+        if (t >= tMin && t <= tMax) {
+          const pt = nearestPoint(s.points, t);
+          const year = new Date(sim.depletedDate).getFullYear();
+          list.push({
+            symbol: s.symbol,
+            seriesIndex: idx,
+            color,
+            depletedDate: sim.depletedDate,
+            year,
+            t,
+            point: pt,
+          });
+        }
+      }
+    });
+
+    const seen = new Set<string>();
+    const deduped: DepletionEvent[] = [];
+    for (const item of list) {
+      const key = `${stripSimSuffix(item.symbol).toUpperCase()}-${item.depletedDate}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push(item);
+      }
+    }
+    return deduped.sort((a, b) => a.t - b.t);
+  }, [plotted, withdrawalRate, inflationRate, tMin, tMax]);
+
   const hoverPoints =
     hoverT !== null
       ? plotted.map((s, idx) => {
@@ -405,6 +461,28 @@ export default function PerformanceChart({
   const activeCrisis = hoveredCrisisDate
     ? visibleCrises.find((c) => c.date === hoveredCrisisDate) ?? null
     : nearestCrisis;
+
+  // ========== 提領耗盡事件鄰近磁吸感測 (Proximity Detection) ==========
+  const nearestDepletion = useMemo(() => {
+    if (hoverX === null || !showDepletions || depletionEvents.length === 0) return null;
+    let closest: { dep: DepletionEvent; dist: number } | null = null;
+    for (const dep of depletionEvents) {
+      const depX = dep.point ? xFor(dep.point.t) : xFor(dep.t);
+      const dist = Math.abs(hoverX - depX);
+      if (dist <= PROXIMITY_THRESHOLD) {
+        if (!closest || dist < closest.dist) {
+          closest = { dep, dist };
+        }
+      }
+    }
+    return closest ? closest.dep : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoverX, showDepletions, depletionEvents]);
+
+  // 作用中的提領耗盡事件（優先使用直接 hover 的，次為鄰近磁吸感測到的）
+  const activeDepletion = hoveredDepletionKey
+    ? depletionEvents.find((d) => `${d.symbol}-${d.depletedDate}` === hoveredDepletionKey) ?? null
+    : nearestDepletion;
 
   // ========== 股票分割點鄰近磁吸感測 (Proximity Detection) ==========
   const nearestSplit = useMemo(() => {
@@ -465,6 +543,9 @@ export default function PerformanceChart({
     Math.max(
       220,
       activeCrisis ? labelWidth(lang === "zh" ? activeCrisis.zh : activeCrisis.en) + 24 : 0,
+      activeDepletion
+        ? labelWidth(`${symbolLabel(activeDepletion.symbol, lang, isSim(activeDepletion.symbol)).code} ${T.depletedAt} ${activeDepletion.year}`) + 40
+        : 0,
       activeSplit ? labelWidth(`${activeSplit.symbol} ${activeSplit.ratio} ${activeSplit.date}`) + 40 : 0,
       ...tooltipDataRows.map((r) => textWidth(`${r.code} ${r.valueStr} (${r.pctStr})`, 9.5) + 36)
     )
@@ -473,7 +554,9 @@ export default function PerformanceChart({
   const tooltipH =
     42 +
     (activeCrisis ? 28 : 0) +
+    (activeDepletion ? 28 : 0) +
     (activeSplit ? 28 : 0) +
+    tooltipDataRows.length * (simEnabled ? 32 : 22);
     tooltipDataRows.length * (simEnabled ? 32 : 22);
 
   // Tooltip 座標防溢出
@@ -592,6 +675,38 @@ export default function PerformanceChart({
               </span>
             </button>
           )}
+
+          {/* 提領耗盡重大事件標註開關 (比照股票分割標註按鈕) */}
+          {depletionEvents.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowDepletions((v) => !v);
+                if (!showDepletions && !simEnabled) {
+                  updateSimSettings({ enabled: true });
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full border transition-all cursor-pointer font-medium"
+              style={{
+                borderColor: showDepletions ? "#DC2626" : "var(--line)",
+                background: showDepletions ? "rgba(220, 38, 38, 0.08)" : "transparent",
+                color: showDepletions ? "#DC2626" : "inherit",
+              }}
+              title={lang === "zh" ? "標註或隱藏走勢圖上的資產耗盡歸零時間點" : "Toggle asset depletion markers on chart"}
+            >
+              <span>⚠️</span>
+              <span>{T.toggleDepletions}</span>
+              <span
+                className="px-1.5 py-0.2 rounded-full text-[10px] font-bold"
+                style={{
+                  background: showDepletions ? "#DC2626" : "var(--line)",
+                  color: showDepletions ? "white" : "inherit",
+                }}
+              >
+                {depletionEvents.length}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* 右側刻度與幣別切換 */}
@@ -663,6 +778,7 @@ export default function PerformanceChart({
             setHoverT(null);
             setHoveredCrisisDate(null);
             setHoveredSplitKey(null);
+            setHoveredDepletionKey(null);
           }}
         >
           {/* 精緻濾鏡與陰影定義 */}
@@ -916,6 +1032,30 @@ export default function PerformanceChart({
               );
             })}
 
+          {/* 提領耗盡事件垂直引導軸線 (比照重大事件與股票分割) */}
+          {showDepletions &&
+            depletionEvents.map((dep) => {
+              const depX = dep.point ? xFor(dep.point.t) : xFor(dep.t);
+              const isNear = activeDepletion?.symbol === dep.symbol && activeDepletion?.depletedDate === dep.depletedDate;
+              const isSeriesHovered = hoveredSymbol === dep.symbol;
+              const isDimmed = hoveredSymbol !== null && !isSeriesHovered;
+
+              return (
+                <line
+                  key={`dep-line-${dep.symbol}-${dep.depletedDate}`}
+                  x1={depX}
+                  x2={depX}
+                  y1={padding.top}
+                  y2={height - padding.bottom}
+                  stroke="#DC2626"
+                  strokeOpacity={isDimmed ? 0.15 : isNear ? 0.95 : 0.55}
+                  strokeWidth={isNear ? 2.2 : 1.4}
+                  strokeDasharray={isNear ? undefined : "4,3"}
+                  className="transition-all duration-200"
+                />
+              );
+            })}
+
           {/* 走勢主要曲線 (Series Lines) */}
           {plotted.map((s, idx) => {
             const color = SERIES_COLORS[idx % SERIES_COLORS.length];
@@ -1142,6 +1282,97 @@ export default function PerformanceChart({
               );
             })}
 
+          {/* 提領耗盡重大事件標註與時間標籤 (比照股票分割與重大事件) */}
+          {showDepletions &&
+            depletionEvents.map((dep, idx) => {
+              const depX = dep.point ? xFor(dep.point.t) : xFor(dep.t);
+              const depY = dep.point ? yFor(dep.point.value) : padding.top + innerH / 2;
+              const isNear = activeDepletion?.symbol === dep.symbol && activeDepletion?.depletedDate === dep.depletedDate;
+              const isSeriesHovered = hoveredSymbol === dep.symbol;
+              const isDimmed = hoveredSymbol !== null && !isSeriesHovered;
+              const key = `${dep.symbol}-${dep.depletedDate}`;
+              const { code } = symbolLabel(dep.symbol, lang, isSim(dep.symbol));
+              const label = `${code} ${T.depletedAt} ${dep.year}`;
+              const labelW = textWidth(label, 8.5) + 24;
+              // 為避免與股票分割標籤垂直位置重疊，若同時有分割標籤則向下微調避開
+              const splitOffset = showSplits && visibleSplits.length > 0 ? 19 : 0;
+              const badgeY = padding.top + 6 + ((idx % 2) * 18) + splitOffset;
+              const badgeX = Math.max(padding.left + 2, Math.min(width - padding.right - labelW - 2, depX - labelW / 2));
+
+              return (
+                <g
+                  key={`dep-marker-${key}`}
+                  className="transition-all duration-200"
+                  style={{ opacity: isDimmed ? 0.22 : 1 }}
+                  onMouseEnter={() => setHoveredDepletionKey(key)}
+                  onMouseLeave={() => setHoveredDepletionKey((cur) => (cur === key ? null : cur))}
+                  onClick={() => {
+                    if (!simEnabled) updateSimSettings({ enabled: true });
+                    setHoveredSymbol(dep.symbol);
+                  }}
+                  cursor="pointer"
+                >
+                  {/* 頂部耗盡事件時間標籤 (Top Depletion Date Badge) */}
+                  <g transform={`translate(${badgeX}, ${badgeY})`}>
+                    <rect
+                      x={0}
+                      y={0}
+                      width={labelW}
+                      height={17}
+                      rx={3.5}
+                      fill="var(--surface)"
+                      stroke="#DC2626"
+                      strokeWidth={isNear ? 1.8 : 1}
+                      filter="drop-shadow(0px 1px 2px rgba(220,38,38,0.2))"
+                    />
+                    <text
+                      x={labelW / 2}
+                      y={12}
+                      fontSize={8.5}
+                      fontWeight={isNear ? 700 : 600}
+                      fill="#DC2626"
+                      textAnchor="middle"
+                    >
+                      ⚠️ {label}
+                    </text>
+                  </g>
+
+                  {/* 買入持有曲線上的耗盡時點節點標記 (Depletion Node on Buy&Hold Curve) */}
+                  {isNear && (
+                    <circle
+                      cx={depX}
+                      cy={depY}
+                      r={10}
+                      fill="none"
+                      stroke="#DC2626"
+                      strokeWidth={1.5}
+                      strokeOpacity={0.4}
+                      className="animate-pulse"
+                    />
+                  )}
+                  <circle
+                    cx={depX}
+                    cy={depY}
+                    r={isNear ? 5.5 : 4.2}
+                    fill="#DC2626"
+                    stroke="var(--surface)"
+                    strokeWidth={1.6}
+                    className="transition-all duration-150"
+                  />
+
+                  {/* 擴大的互動熱區 (寬 28px) */}
+                  <rect
+                    x={depX - 14}
+                    y={padding.top}
+                    width={28}
+                    height={innerH}
+                    fill="transparent"
+                    style={{ cursor: "pointer" }}
+                  />
+                </g>
+              );
+            })}
+
           {/* 滑鼠垂直時間引導線與節點 (Crosshair) */}
           {hoverX !== null && (
             <>
@@ -1242,9 +1473,34 @@ export default function PerformanceChart({
                 </g>
               )}
 
+              {/* 提領耗盡重大事件突出橫幅 (若靠近耗盡時間點) */}
+              {activeDepletion && (
+                <g transform={`translate(10, ${26 + (activeCrisis ? 28 : 0)})`}>
+                  <rect
+                    x={0}
+                    y={0}
+                    width={tooltipW - 20}
+                    height={22}
+                    rx={4}
+                    fill="#FEF2F2"
+                    stroke="#EF4444"
+                    strokeWidth={1}
+                  />
+                  <text
+                    x={8}
+                    y={15}
+                    fontSize={9.5}
+                    fontWeight={700}
+                    fill="#B91C1C"
+                  >
+                    ⚠️ {symbolLabel(activeDepletion.symbol, lang, isSim(activeDepletion.symbol)).code} {T.depletedAt} {activeDepletion.year}（{withdrawalRate}%{lang === "zh" ? "提領生活費歸零" : "wd depleted"}）
+                  </text>
+                </g>
+              )}
+
               {/* 股票分割事件突出橫幅 (若靠近分割時間點) */}
               {activeSplit && (
-                <g transform={`translate(10, ${activeCrisis ? 52 : 26})`}>
+                <g transform={`translate(10, ${26 + (activeCrisis ? 28 : 0) + (activeDepletion ? 28 : 0)})`}>
                   <rect
                     x={0}
                     y={0}
@@ -1271,15 +1527,15 @@ export default function PerformanceChart({
               <line
                 x1={10}
                 x2={tooltipW - 10}
-                y1={26 + (activeCrisis ? 28 : 0) + (activeSplit ? 28 : 0)}
-                y2={26 + (activeCrisis ? 28 : 0) + (activeSplit ? 28 : 0)}
+                y1={26 + (activeCrisis ? 28 : 0) + (activeDepletion ? 28 : 0) + (activeSplit ? 28 : 0)}
+                y2={26 + (activeCrisis ? 28 : 0) + (activeDepletion ? 28 : 0) + (activeSplit ? 28 : 0)}
                 stroke="var(--line)"
                 strokeWidth={0.8}
               />
 
               {/* 各標的數據列 */}
               {tooltipDataRows.map((row, rIdx) => {
-                const baseStartY = 40 + (activeCrisis ? 28 : 0) + (activeSplit ? 28 : 0);
+                const baseStartY = 40 + (activeCrisis ? 28 : 0) + (activeDepletion ? 28 : 0) + (activeSplit ? 28 : 0);
                 const startY = baseStartY + rIdx * (simEnabled ? 30 : 20);
 
                 return (
@@ -1438,6 +1694,47 @@ export default function PerformanceChart({
                 <span>{sp.date}</span>
                 <span className="opacity-75">[{sp.ratio}]</span>
               </span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 期間提領耗盡重大事件摘要清單 (比照股票分割事件摘要) */}
+      {showDepletions && depletionEvents.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-[var(--background)] rounded-xl border border-[var(--line)] text-xs">
+          <span className="font-semibold text-[#DC2626] flex items-center gap-1.5">
+            <span>⚠️</span>
+            <span>{T.depletionEventsSummary}：</span>
+          </span>
+          {depletionEvents.map((dep) => {
+            const isNear = activeDepletion?.symbol === dep.symbol && activeDepletion?.depletedDate === dep.depletedDate;
+            const key = `${dep.symbol}-${dep.depletedDate}`;
+            const { code } = symbolLabel(dep.symbol, lang, isSim(dep.symbol));
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  if (!simEnabled) updateSimSettings({ enabled: true });
+                  setHoveredSymbol(dep.symbol);
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-all cursor-pointer select-none text-xs"
+                style={{
+                  borderColor: isNear ? "#DC2626" : "var(--line)",
+                  background: isNear ? "rgba(220, 38, 38, 0.08)" : "var(--surface)",
+                  color: isNear ? "#DC2626" : "inherit",
+                  boxShadow: isNear ? "0 1px 3px rgba(220, 38, 38, 0.15)" : "none",
+                  fontWeight: isNear ? 700 : 500,
+                }}
+                onMouseEnter={() => setHoveredDepletionKey(key)}
+                onMouseLeave={() => setHoveredDepletionKey((cur) => (cur === key ? null : cur))}
+                title={lang === "zh" ? "點擊切換開啟提領走勢對照並聚焦該標的" : "Click to show withdrawal comparison and focus symbol"}
+              >
+                <span className="w-2 h-2 rounded-full bg-[#DC2626]" />
+                <span className="font-semibold">{code}</span>
+                <span>{dep.year}年</span>
+                <span className="opacity-75">[{T.depletedAt} {dep.year}]</span>
+              </button>
             );
           })}
         </div>

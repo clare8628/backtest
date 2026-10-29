@@ -1257,6 +1257,40 @@ describe("calculateBacktestRange (BAC-20)", () => {
   });
 });
 
+describe("simulateWithdrawnSeries and depletion event detection", () => {
+  it("detects depletion event correctly when catastrophic drawdown causes liquidation", () => {
+    // 模擬 1999 年起點 100，2000-2002 年經歷達康泡沫 99.9% 暴跌
+    const points = [
+      { date: "1999-01-01", value: 100 },
+      { date: "2000-01-01", value: 150 },
+      { date: "2001-01-01", value: 30 },
+      { date: "2002-01-01", value: 1 },
+      { date: "2002-06-01", value: 0.1 },
+      { date: "2003-01-01", value: 0.5 },
+      { date: "2026-01-01", value: 200 },
+    ];
+
+    const result = simulateWithdrawnSeries(points, 100, 3, 3);
+    expect(result.finalValue).toBe(0);
+    expect(result.depletedDate).not.toBeNull();
+    // 2002 年資產不足以支付生活費，宣告耗盡歸零
+    expect(new Date(result.depletedDate!).getFullYear()).toBe(2002);
+  });
+
+  it("does not trigger depletion for stable asset and retains positive final value", () => {
+    const points = [
+      { date: "1999-01-01", value: 100 },
+      { date: "2005-01-01", value: 120 },
+      { date: "2015-01-01", value: 250 },
+      { date: "2026-01-01", value: 500 },
+    ];
+
+    const result = simulateWithdrawnSeries(points, 100, 3, 3);
+    expect(result.finalValue).toBeGreaterThan(0);
+    expect(result.depletedDate).toBeNull();
+  });
+});
+
 
 
 
