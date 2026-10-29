@@ -3,7 +3,7 @@
 import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { t, Lang } from "@/lib/i18n";
 import { displaySymbol, findEntry, registerDynamicSymbol, searchCatalog, symbolLabel } from "@/lib/symbolCatalog";
-import { DEFAULT_ALO_RISK, getLeverageSpec, isAllocationSymbol, isSimulatedSymbol, parseAllocation, stripSimSuffix, withVariantOf } from "@/lib/leverageSim";
+import { DEFAULT_ALO_RISK, getLeverageSpec, isAllocationSymbol, isSimulatedSymbol, parseAllocation, stripSimSuffix, withAllocationRatio, withVariantOf } from "@/lib/leverageSim";
 import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries, Currency } from "@/lib/types";
 import { loadGroups, upsertGroup, reorderGroups, deleteGroup, newGroupId } from "@/lib/storage";
 import PerformanceChart, { SimSettings } from "@/components/PerformanceChart";
@@ -327,10 +327,36 @@ function metricSections(
  *  "TQQQ@alo(60:40)" into the search box instead of adding it straight away. */
 function pickSuggestion(symbol: string, setText: (v: string) => void, add: (v: string) => void) {
   if (isAllocationSymbol(symbol) && !/\(/.test(symbol)) {
-    setText(`${symbol}(${DEFAULT_ALO_RISK}:${100 - DEFAULT_ALO_RISK})`);
+    setText(withAllocationRatio(symbol, DEFAULT_ALO_RISK));
     return;
   }
   add(symbol);
+}
+
+/** Shown under a symbol search box whenever its text ends in "@alo": a
+ *  default ratio is already filled in (via pickSuggestion), and this lets
+ *  the user adjust it with a number input instead of hand-editing the
+ *  "(60:40)" text. */
+function AllocationAdjuster({ text, setText, T }: { text: string; setText: (v: string) => void; T: Dict }) {
+  if (!isAllocationSymbol(text)) return null;
+  const risk = parseAllocation(text)?.risk ?? DEFAULT_ALO_RISK;
+  return (
+    <div className="flex items-center gap-2 text-xs px-1" style={{ color: "var(--foreground-muted)" }}>
+      <span>{T.allocationRatioLabel}</span>
+      <input
+        type="number"
+        min={1}
+        max={100}
+        value={risk}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          if (!Number.isNaN(n)) setText(withAllocationRatio(text, n));
+        }}
+        className="field w-16 px-2 py-1 text-xs"
+      />
+      <span>% · {T.allocationCashLabel} {100 - risk}%</span>
+    </div>
+  );
 }
 
 function MetricsTable({
@@ -1079,6 +1105,8 @@ export default function Home() {
             </button>
           </div>
 
+          <AllocationAdjuster text={query} setText={setQuery} T={T} />
+
           {lookupLoading && (
             <div className="flex items-center gap-2 text-xs py-2 px-3 rounded-md animate-pulse" style={{ background: "var(--background)", border: "1px solid var(--line)", color: "var(--foreground)" }}>
               <span className="inline-block w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin shrink-0" />
@@ -1568,6 +1596,8 @@ export default function Home() {
                         <span>{groupLookupLoadingId === g.id ? T.running : T.addSymbol}</span>
                       </button>
                     </div>
+
+                    <AllocationAdjuster text={editQuery} setText={setEditQuery} T={T} />
 
                     {groupLookupLoadingId === g.id && (
                       <div className="flex items-center gap-2 text-xs py-2 px-3 rounded-md animate-pulse" style={{ background: "var(--surface)", border: "1px solid var(--line)" }}>

@@ -67,6 +67,16 @@ export function allocationSuffix(a: Allocation): string {
   return `${ALO_SUFFIX}(${a.risk}:${a.cash})`;
 }
 
+/** Rewrites the ratio on a symbol that already carries (or is about to carry)
+ *  an "@alo" suffix, keeping the base ticker and any "@sim" intact. Used to
+ *  drive an adjustable ratio control from a plain risk% input. */
+export function withAllocationRatio(symbol: string, risk: number): string {
+  const idx = symbol.search(/@alo/i);
+  const base = (idx >= 0 ? symbol.slice(0, idx) : symbol).trim();
+  const clamped = Math.min(100, Math.max(1, risk));
+  return `${base}${allocationSuffix({ risk: clamped, cash: 100 - clamped })}`;
+}
+
 function endsWithSim(s: string): boolean {
   return s.trim().toUpperCase().endsWith(SIM_SUFFIX.toUpperCase());
 }

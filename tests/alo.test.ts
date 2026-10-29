@@ -4,6 +4,7 @@ import {
   parseAllocation,
   simulateAllocation,
   stripSimSuffix,
+  withAllocationRatio,
   withVariantOf,
 } from "@/lib/leverageSim";
 import { searchCatalog, symbolLabel } from "@/lib/symbolCatalog";
@@ -45,6 +46,14 @@ describe("@alo allocation variants", () => {
     // drift untouched: 0.5 share asset + 50 cash
     expect(out[1].close).toBeCloseTo(150);
     expect(out[2].close).toBeCloseTo(100);
+  });
+
+  it("rewrites the ratio for an adjustable allocation control", () => {
+    expect(withAllocationRatio("TQQQ@alo", 70)).toBe("TQQQ@alo(70:30)");
+    expect(withAllocationRatio("TQQQ@alo(60:40)", 80)).toBe("TQQQ@alo(80:20)");
+    expect(withAllocationRatio("TQQQ@sim@alo(60:40)", 90)).toBe("TQQQ@sim@alo(90:10)");
+    expect(withAllocationRatio("TQQQ@alo", 150)).toBe("TQQQ@alo(100:0)");
+    expect(withAllocationRatio("TQQQ@alo", 0)).toBe("TQQQ@alo(1:99)");
   });
 
   it("lists @alo variants in suggestions and labels them", () => {
