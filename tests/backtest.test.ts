@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, downsamplePrices, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, stdDev, incomeProfile, simulateWithdrawnSeries, commonWindow } from "@/lib/backtest";
+import { computeMetrics, recommend, maxDrawdown, dailyReturns, dailyReturnsWithDates, normalizeToIndex, downsamplePrices, RECOMMENDATION_WEIGHTS, calculateBeta, monthEndCloses, trendStrength, periodsPerYear, stdDev, incomeProfile, simulateWithdrawnSeries, commonWindow, calculateBacktestRange, RANGE_MIN_YEARS, RANGE_MAX_YEARS } from "@/lib/backtest";
 import { parseStooqCsv, toStooqSymbol, toYahooSymbol, splitsUnreported, getKnownSplits, KNOWN_SPLITS, isTaiwanListed, symbolCandidates, lookupSymbol } from "@/lib/marketData";
 import { displaySymbol, findEntry, fundSizeIn, getAssetClass, getCreditRating, getFundSize, getFundSizeUnavailableReason, getManagementFee, hasKnownManagementFee, nativeCurrencyOf, registerDynamicSymbol, searchCatalog, SYMBOL_CATALOG } from "@/lib/symbolCatalog";
 import { formatBuildStamp, formatBuildTime } from "@/lib/version";
@@ -1172,6 +1172,69 @@ describe("catalog lookups with a stray @sim-tagged symbol", () => {
     expect(findEntry("VGLT@sim")?.symbol).toBe("VGLT");
   });
 });
+
+describe("calculateBacktestRange (BAC-20)", () => {
+  const currentYear = 2026;
+
+  it("calculates minYear as 1999 for QQQ and TQQQ@sim based on inception date 1999-03-10", () => {
+    const metrics = [
+      { symbol: "QQQ", maxBacktestYears: 27.64, firstDate: "1999-03-10" },
+      { symbol: "TQQQ@sim", maxBacktestYears: 27.64, firstDate: "1999-03-10" },
+    ];
+    const bounds = calculateBacktestRange(metrics, currentYear);
+    expect(bounds.minYear).toBe(1999);
+    expect(bounds.maxYear).toBe(2026);
+    expect(bounds.maxYears).toBe(27);
+    expect(bounds.earliestInceptionYear).toBe(1999);
+  });
+
+  it("excludes unsimulated counterpart from dragging minYear forward when @sim variant exists", () => {
+    const metrics = [
+      { symbol: "QQQ", maxBacktestYears: 27.64, firstDate: "1999-03-10" },
+      { symbol: "TQQQ", maxBacktestYears: 16.7, firstDate: "2010-02-11" },
+      { symbol: "TQQQ@sim", maxBacktestYears: 27.64, firstDate: "1999-03-10" },
+    ];
+    const bounds = calculateBacktestRange(metrics, currentYear);
+    expect(bounds.minYear).toBe(1999);
+    expect(bounds.maxYears).toBe(27);
+  });
+
+  it("aligns to the latest inception year (shortest history) among active targets", () => {
+    const metrics = [
+      { symbol: "QQQ", maxBacktestYears: 27.64, firstDate: "1999-03-10" },
+      { symbol: "SPMO", maxBacktestYears: 11.0, firstDate: "2015-10-15" },
+    ];
+    const bounds = calculateBacktestRange(metrics, currentYear);
+    expect(bounds.minYear).toBe(2015);
+    expect(bounds.maxYears).toBe(11);
+  });
+
+  it("falls back to maxBacktestYears when firstDate is absent", () => {
+    const metrics = [
+      { symbol: "QQQI", maxBacktestYears: 1.5 },
+    ];
+    const bounds = calculateBacktestRange(metrics, currentYear);
+    expect(bounds.minYear).toBe(2024);
+    expect(bounds.maxYears).toBe(2);
+  });
+
+  it("handles empty metrics gracefully with max range bounds", () => {
+    const bounds = calculateBacktestRange([], currentYear);
+    expect(bounds.minYear).toBe(currentYear - RANGE_MAX_YEARS);
+    expect(bounds.maxYear).toBe(currentYear);
+    expect(bounds.maxYears).toBe(RANGE_MAX_YEARS);
+  });
+
+  it("clamps to 50 years max when symbols have older history (e.g. 1960)", () => {
+    const metrics = [
+      { symbol: "LEGACY", maxBacktestYears: 65.0, firstDate: "1960-01-01" },
+    ];
+    const bounds = calculateBacktestRange(metrics, currentYear);
+    expect(bounds.minYear).toBe(currentYear - RANGE_MAX_YEARS);
+    expect(bounds.maxYears).toBe(RANGE_MAX_YEARS);
+  });
+});
+
 
 
 

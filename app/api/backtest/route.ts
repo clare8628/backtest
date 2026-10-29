@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
     const yearsFromStart = startDate
       ? Math.ceil((Date.now() - new Date(startDate).getTime()) / MS_PER_YEAR) + 1
       : rangeYears;
-    const fetchRangeYears = Math.min(30, Math.max(rangeYears, yearsFromStart));
+    const fetchRangeYears = Math.min(CEILING_FETCH_YEARS, Math.max(rangeYears, yearsFromStart));
 
     // Main fetch at the user's requested (daily-resolution) range, plus a
     // parallel low-cost fetch purely to learn each symbol's true native date

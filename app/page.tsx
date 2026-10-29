@@ -8,7 +8,7 @@ import { ComparisonGroup, BacktestMetrics, Recommendation, ChartSeries, Currency
 import { loadGroups, upsertGroup, reorderGroups, deleteGroup, newGroupId } from "@/lib/storage";
 import PerformanceChart, { SimSettings } from "@/components/PerformanceChart";
 import Sparkline from "@/components/Sparkline";
-import { simulateWithdrawnSeries } from "@/lib/backtest";
+import { calculateBacktestRange, RANGE_MIN_YEARS, RANGE_MAX_YEARS, simulateWithdrawnSeries } from "@/lib/backtest";
 import { APP_VERSION, BUILD_TIME_ISO, DISPLAY_VERSION, formatBuildStamp, formatBuildTime } from "@/lib/version";
 
 interface BacktestResult {
@@ -25,8 +25,8 @@ const DEBOUNCE_MS = 500;
 
 /** Range-slider bounds, and the value a brand-new group starts at before its
  *  first backtest fits it to the data. */
-const RANGE_MIN = 1;
-const RANGE_MAX = 20;
+const RANGE_MIN = RANGE_MIN_YEARS;
+const RANGE_MAX = RANGE_MAX_YEARS;
 const DEFAULT_RANGE_YEARS = 5;
 const MAX_SYMBOLS_PER_GROUP = 15;
 
@@ -651,31 +651,21 @@ export default function Home() {
    * For a brand-new group (!rangeFitted), it snaps directly to this ceiling.
    */
   function maybeAutoFitRange(group: ComparisonGroup, data: BacktestResult) {
-    const simVariantBases = new Set(
-      (data.metrics ?? [])
-        .filter((m) => isSimulatedSymbol(m.symbol))
-        .map((m) => stripSimSuffix(m.symbol).toUpperCase())
-    );
-    const unsimulatedCounterparts = new Set(
-      (data.metrics ?? [])
-        .filter((m) => !isSimulatedSymbol(m.symbol) && simVariantBases.has(m.symbol.toUpperCase()))
-        .map((m) => m.symbol)
-    );
-    const candidateMetrics = (data.metrics ?? []).filter(
-      (m) => !unsimulatedCounterparts.has(m.symbol)
-    );
-    const pool = candidateMetrics.length > 0 ? candidateMetrics : data.metrics ?? [];
-    const ceilings = pool
-      .map((m) => m.maxBacktestYears)
-      .filter((y): y is number => typeof y === "number" && y > 0);
-    if (ceilings.length === 0) return; // every symbol errored — try again next run
-    const maxAvailable = Math.min(RANGE_MAX, Math.max(RANGE_MIN, Math.ceil(Math.min(...ceilings))));
+    if (!data.metrics || data.metrics.length === 0) return;
     const thisYear = new Date().getFullYear();
+    const rangeBounds = calculateBacktestRange(data.metrics, thisYear, RANGE_MAX);
 
-    if (!group.rangeFitted) {
-      const fit = maxAvailable;
-      const fitStart = thisYear - fit;
-      const fitEnd = thisYear;
+    // Existing saved groups might be stuck at 2006 (20 years) due to previous hardcoded 20-year ceiling.
+    // If the symbols actually have earlier history (e.g. QQQ 1999), automatically upgrade them.
+    const isOld20YearCap =
+      group.rangeYears === 20 &&
+      group.startYear === 2006 &&
+      rangeBounds.minYear < 2006;
+
+    if (!group.rangeFitted || isOld20YearCap) {
+      const fitStart = rangeBounds.minYear;
+      const fitEnd = rangeBounds.maxYear;
+      const fit = rangeBounds.maxYears;
       const fitted = {
         ...group,
         rangeYears: fit,
@@ -696,12 +686,15 @@ export default function Home() {
     }
 
     // Even if rangeFitted (user adjusted or previous fit), if current range exceeds the shortest symbol ceiling,
-    // clamp it down automatically to the shortest symbol's max ceiling.
-    if (group.rangeYears > maxAvailable) {
-      const fitStart = Math.max(group.startYear ?? (thisYear - group.rangeYears), thisYear - maxAvailable);
+    // or starts before available history, clamp it down automatically to the shortest symbol's max ceiling.
+    if (
+      group.rangeYears > rangeBounds.maxYears ||
+      (typeof group.startYear === "number" && group.startYear < rangeBounds.minYear)
+    ) {
+      const fitStart = Math.max(group.startYear ?? rangeBounds.minYear, rangeBounds.minYear);
       const fitted = {
         ...group,
-        rangeYears: maxAvailable,
+        rangeYears: Math.min(group.rangeYears, rangeBounds.maxYears),
         startYear: fitStart,
         endYear: group.endYear ?? thisYear,
       };
@@ -1357,20 +1350,18 @@ export default function Home() {
           const isLoading = loadingId === g.id;
           const isEditing = editingGroupId === g.id;
 
-          const ceilings = (result?.metrics ?? [])
-            .map((m) => m.maxBacktestYears)
-            .filter((y): y is number => typeof y === "number" && y > 0);
-          const maxGroupYears = ceilings.length > 0
-            ? Math.min(RANGE_MAX, Math.max(RANGE_MIN, Math.ceil(Math.min(...ceilings))))
-            : RANGE_MAX;
           const thisYear = new Date().getFullYear();
-          const groupMinYear = thisYear - maxGroupYears;
-          const groupMaxYear = thisYear;
+          const rangeBounds = calculateBacktestRange(result?.metrics ?? [], thisYear, RANGE_MAX);
+          const groupMinYear = rangeBounds.minYear;
+          const groupMaxYear = rangeBounds.maxYear;
           const currentStartYear =
             typeof g.startYear === "number"
-              ? g.startYear
+              ? Math.max(groupMinYear, Math.min(g.startYear, groupMaxYear - RANGE_MIN))
               : Math.max(groupMinYear, thisYear - (g.rangeYears || 5));
-          const currentEndYear = typeof g.endYear === "number" ? g.endYear : thisYear;
+          const currentEndYear =
+            typeof g.endYear === "number"
+              ? Math.min(groupMaxYear, Math.max(g.endYear, currentStartYear + RANGE_MIN))
+              : thisYear;
 
           const sortedByInception = [...(result?.metrics ?? [])].sort((a, b) => {
             const ya = typeof a.maxBacktestYears === "number" ? a.maxBacktestYears : 0;

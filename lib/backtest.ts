@@ -1,5 +1,6 @@
 import { BacktestMetrics, DividendEvent, IndexedPoint, PricePoint, Recommendation, SymbolSeries } from "./types";
 import { getManagementFee } from "./symbolCatalog";
+import { isSimulatedSymbol, stripSimSuffix } from "./leverageSim";
 
 const TRADING_DAYS_PER_YEAR = 252;
 const RISK_FREE_RATE = 0.02; // 2% annual, simplification for Sharpe ratio
@@ -465,6 +466,81 @@ export function commonWindow(
     if (last < end) end = last;
   }
   return start <= end ? { start, end } : null;
+}
+
+export const RANGE_MIN_YEARS = 1;
+export const RANGE_MAX_YEARS = 50;
+
+export interface BacktestRangeBounds {
+  minYear: number;
+  maxYear: number;
+  maxYears: number;
+  earliestInceptionYear: number;
+}
+
+/**
+ * Calculates the available backtest year bounds for a group of symbols.
+ * Filters out unsimulated counterparts (e.g. real TQQQ when TQQQ@sim is present)
+ * so shorter unsimulated history doesn't falsely drag the start year forward.
+ * Uses each symbol's true inception date (firstDate) or maxBacktestYears to find the
+ * earliest calendar year where all candidate targets in the comparison have trading data.
+ */
+export function calculateBacktestRange(
+  metrics: Array<{ symbol: string; maxBacktestYears?: number; firstDate?: string }>,
+  currentYear = new Date().getFullYear(),
+  maxCeilingYears = RANGE_MAX_YEARS
+): BacktestRangeBounds {
+  const simVariantBases = new Set(
+    metrics
+      .filter((m) => isSimulatedSymbol(m.symbol))
+      .map((m) => stripSimSuffix(m.symbol).toUpperCase())
+  );
+  const unsimulatedCounterparts = new Set(
+    metrics
+      .filter((m) => !isSimulatedSymbol(m.symbol) && simVariantBases.has(m.symbol.toUpperCase()))
+      .map((m) => m.symbol)
+  );
+  const candidateMetrics = metrics.filter((m) => !unsimulatedCounterparts.has(m.symbol));
+  const pool = candidateMetrics.length > 0 ? candidateMetrics : metrics;
+
+  const validCeilings = pool
+    .map((m) => m.maxBacktestYears)
+    .filter((y): y is number => typeof y === "number" && y > 0);
+
+  if (pool.length === 0 || validCeilings.length === 0) {
+    const minYear = currentYear - maxCeilingYears;
+    return {
+      minYear,
+      maxYear: currentYear,
+      maxYears: maxCeilingYears,
+      earliestInceptionYear: minYear,
+    };
+  }
+
+  const firstYears = pool.map((m) => {
+    if (m.firstDate) {
+      const parsedYear = new Date(m.firstDate).getFullYear();
+      if (!Number.isNaN(parsedYear) && parsedYear > 1900 && parsedYear <= currentYear) {
+        return parsedYear;
+      }
+    }
+    const years = typeof m.maxBacktestYears === "number" ? m.maxBacktestYears : 0;
+    return currentYear - Math.ceil(years);
+  });
+
+  const earliestInceptionYear = Math.max(...firstYears);
+  const minYear = Math.max(
+    currentYear - maxCeilingYears,
+    Math.min(currentYear - RANGE_MIN_YEARS, earliestInceptionYear)
+  );
+  const maxYears = Math.max(RANGE_MIN_YEARS, currentYear - minYear);
+
+  return {
+    minYear,
+    maxYear: currentYear,
+    maxYears,
+    earliestInceptionYear,
+  };
 }
 
 /** Keeps only the price points falling within an inclusive [start, end] date window. */
