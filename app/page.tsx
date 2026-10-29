@@ -1952,6 +1952,23 @@ function DualRangeSlider({
   const duration = clampedEnd - clampedStart;
 
   const [activeThumb, setActiveThumb] = useState<"left" | "right" | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Keeps the floating year bubble visible while the thumb is actively being
+  // moved (mouse drag, touch drag, or keyboard nudges), then fades it out
+  // shortly after the last change so users can read the value they landed on.
+  const pokeDragTooltip = () => {
+    setIsDragging(true);
+    if (dragHideTimer.current) clearTimeout(dragHideTimer.current);
+    dragHideTimer.current = setTimeout(() => setIsDragging(false), 700);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (dragHideTimer.current) clearTimeout(dragHideTimer.current);
+    };
+  }, []);
 
   return (
     <div className="flex flex-col gap-2">
@@ -2009,12 +2026,23 @@ function DualRangeSlider({
           step={1}
           value={clampedStart}
           onFocus={() => setActiveThumb("left")}
-          onMouseDown={() => setActiveThumb("left")}
-          onTouchStart={() => setActiveThumb("left")}
+          onMouseDown={() => {
+            setActiveThumb("left");
+            pokeDragTooltip();
+          }}
+          onTouchStart={() => {
+            setActiveThumb("left");
+            pokeDragTooltip();
+          }}
+          onKeyDown={() => {
+            setActiveThumb("left");
+            pokeDragTooltip();
+          }}
           onChange={(e) => {
             const val = Number(e.target.value);
             const clamped = Math.min(val, clampedEnd - minGap);
             onChange(clamped, clampedEnd);
+            pokeDragTooltip();
           }}
           className="dual-range-input"
           style={{ zIndex: activeThumb === "left" || clampedStart > safeMax - 2 ? 6 : 4 }}
@@ -2028,17 +2056,48 @@ function DualRangeSlider({
           step={1}
           value={clampedEnd}
           onFocus={() => setActiveThumb("right")}
-          onMouseDown={() => setActiveThumb("right")}
-          onTouchStart={() => setActiveThumb("right")}
+          onMouseDown={() => {
+            setActiveThumb("right");
+            pokeDragTooltip();
+          }}
+          onTouchStart={() => {
+            setActiveThumb("right");
+            pokeDragTooltip();
+          }}
+          onKeyDown={() => {
+            setActiveThumb("right");
+            pokeDragTooltip();
+          }}
           onChange={(e) => {
             const val = Number(e.target.value);
             const clamped = Math.max(val, clampedStart + minGap);
             onChange(clampedStart, clamped);
+            pokeDragTooltip();
           }}
           className="dual-range-input"
           style={{ zIndex: activeThumb === "right" ? 6 : 5 }}
           aria-label={`${label} End Year`}
         />
+
+        {/* Floating year bubble shown above the thumb while it's being moved */}
+        {isDragging && activeThumb === "left" && (
+          <div
+            className="dual-range-tooltip"
+            style={{ left: `${leftPercent}%` }}
+            aria-hidden="true"
+          >
+            {clampedStart}
+          </div>
+        )}
+        {isDragging && activeThumb === "right" && (
+          <div
+            className="dual-range-tooltip"
+            style={{ left: `${rightPercent}%` }}
+            aria-hidden="true"
+          >
+            {clampedEnd}
+          </div>
+        )}
       </div>
 
       {/* Axis marks below the slider */}
