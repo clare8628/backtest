@@ -1233,6 +1233,28 @@ describe("calculateBacktestRange (BAC-20)", () => {
     expect(bounds.minYear).toBe(currentYear - RANGE_MAX_YEARS);
     expect(bounds.maxYears).toBe(RANGE_MAX_YEARS);
   });
+
+  it("detects old 20-year cap for groups stored before BAC-20 with or without explicit startYear", () => {
+    const metrics = [
+      { symbol: "QQQ", maxBacktestYears: 27.64, firstDate: "1999-03-10" },
+      { symbol: "TQQQ@sim", maxBacktestYears: 27.64, firstDate: "1999-03-10" },
+    ];
+    const bounds = calculateBacktestRange(metrics, currentYear);
+    expect(bounds.minYear).toBe(1999);
+
+    const oldGroupWithExplicitStart = { rangeYears: 20, startYear: 2006, rangeFitted: true };
+    const oldGroupWithoutStart = { rangeYears: 20, startYear: undefined, rangeFitted: true };
+    const userAdjustedGroup = { rangeYears: 15, startYear: 2010, rangeFitted: true };
+
+    const shouldUpgrade = (g: { rangeYears: number; startYear?: number | null }) =>
+      g.rangeYears === 20 &&
+      (g.startYear === 2006 || g.startYear === undefined || g.startYear === null) &&
+      bounds.minYear < 2006;
+
+    expect(shouldUpgrade(oldGroupWithExplicitStart)).toBe(true);
+    expect(shouldUpgrade(oldGroupWithoutStart)).toBe(true);
+    expect(shouldUpgrade(userAdjustedGroup)).toBe(false);
+  });
 });
 
 

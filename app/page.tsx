@@ -659,7 +659,7 @@ export default function Home() {
     // If the symbols actually have earlier history (e.g. QQQ 1999), automatically upgrade them.
     const isOld20YearCap =
       group.rangeYears === 20 &&
-      group.startYear === 2006 &&
+      (group.startYear === 2006 || group.startYear === undefined || group.startYear === null) &&
       rangeBounds.minYear < 2006;
 
     if (!group.rangeFitted || isOld20YearCap) {

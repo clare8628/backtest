@@ -35,9 +35,8 @@ const USD_TWD_FX_SYMBOL = "TWD=X";
 // A second, separate fetch (beyond the user's requested range) so we can
 // report each ETF's true backtestable ceiling — e.g. a fund listed 2 years
 // ago tops out at ~2 years no matter how far the range slider is pushed.
-// The UI's slider never exceeds 20 years, so this comfortably covers it;
-// funds older than this (e.g. SPY, ~33y) just get capped here, which doesn't
-// matter since the slider can't reach that far anyway.
+// The UI's slider supports up to 50 years, so this ceiling comfortably covers
+// long-standing funds like SPY (~33y) or QQQ (~27y).
 //
 // This MUST stay a separate fetch from the main one used for metrics/chart
 // data: Yahoo silently coarsens very long ranges to monthly bars — even with
