@@ -723,6 +723,20 @@ describe("catalog entry for VGLT", () => {
   });
 });
 
+describe("searchCatalog with a leveraged ETF prefix", () => {
+  it("lists the fund's @sim simulated-extension entry right after it", () => {
+    const results = searchCatalog("TQQ");
+    const tqqqIdx = results.findIndex((r) => r.symbol === "TQQQ");
+    expect(tqqqIdx).toBeGreaterThanOrEqual(0);
+    expect(results[tqqqIdx + 1]?.symbol).toBe("TQQQ@sim");
+  });
+
+  it("does not add a @sim entry for funds with no leverage spec", () => {
+    const results = searchCatalog("vglt");
+    expect(results.some((r) => r.symbol.endsWith("@sim"))).toBe(false);
+  });
+});
+
 describe("simulateWithdrawnSeries", () => {
   it("calculates initial withdrawal and annual inflation-adjusted withdrawals", () => {
     // 兩年資料：2023年與2024年，股價持平為 100
@@ -1104,45 +1118,23 @@ describe("commonWindow", () => {
       { date: "2026-01-01", close: 500 },
     ],
   };
-  const real: SymbolSeries = {
-    symbol: "TQQQ@real",
+  const other: SymbolSeries = {
+    symbol: "QQQ",
     prices: [
       { date: "2010-02-12", close: 1 },
       { date: "2026-01-01", close: 90 },
     ],
   };
 
-  it("pegs the start to the latest-starting series by default", () => {
-    expect(commonWindow([sim, real])).toEqual({ start: "2010-02-12", end: "2026-01-01" });
-  });
-
-  it("ignores an excluded series' start, so a real-only entry doesn't clip its simulated sibling", () => {
-    expect(commonWindow([sim, real], new Set(["TQQQ@real"]))).toEqual({
-      start: "1999-03-11",
-      end: "2026-01-01",
-    });
-  });
-
-  it("still uses the excluded series for the end date", () => {
-    const shortEnd: SymbolSeries = { ...real, prices: [real.prices[0], { date: "2020-01-01", close: 5 }] };
-    expect(commonWindow([sim, shortEnd], new Set(["TQQQ@real"]))).toEqual({
-      start: "1999-03-11",
-      end: "2020-01-01",
-    });
-  });
-
-  it("falls back to every series when all of them are excluded", () => {
-    expect(commonWindow([real], new Set(["TQQQ@real"]))).toEqual({
-      start: "2010-02-12",
-      end: "2026-01-01",
-    });
+  it("pegs the start to the latest-starting series and the end to the earliest-ending one", () => {
+    expect(commonWindow([sim, other])).toEqual({ start: "2010-02-12", end: "2026-01-01" });
   });
 });
 
-describe("catalog lookups with an @real-tagged symbol", () => {
+describe("catalog lookups with a stray @sim-tagged symbol", () => {
   it("resolve the same as the plain ticker", () => {
-    expect(nativeCurrencyOf("00687B.TWO@real")).toBe("TWD");
-    expect(findEntry("VGLT@real")?.symbol).toBe("VGLT");
+    expect(nativeCurrencyOf("00687B.TWO@sim")).toBe("TWD");
+    expect(findEntry("VGLT@sim")?.symbol).toBe("VGLT");
   });
 });
 

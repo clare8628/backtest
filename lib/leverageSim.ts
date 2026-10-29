@@ -17,15 +17,6 @@ export interface LeverageSpec {
 }
 
 export const SIM_SUFFIX = "@sim";
-/**
- * Explicit opt-out: appending "@real" to a symbol adds it as the real-data-only
- * counterpart of a leveraged ETF, never extended with simulated pre-inception
- * prices — even though the bare symbol auto-extends by default. This lets the
- * original (truncated) and simulated series for the same ticker sit side by
- * side in one comparison, e.g. "TQQQ" (auto, extends when the range needs it)
- * next to "TQQQ@real" (always real-only).
- */
-export const REAL_SUFFIX = "@real";
 
 /**
  * Users may type the displayed "@sim" suffix back into a symbol search box
@@ -38,42 +29,6 @@ export function stripSimSuffix(symbol: string): string {
     return s.slice(0, s.length - SIM_SUFFIX.length).trim();
   }
   return s;
-}
-
-/** Strips a trailing "@real" suffix (case-insensitive), the counterpart of
- *  stripSimSuffix for the explicit real-only opt-out. */
-export function stripRealSuffix(symbol: string): string {
-  const s = symbol.trim();
-  if (s.toUpperCase().endsWith(REAL_SUFFIX.toUpperCase())) {
-    return s.slice(0, s.length - REAL_SUFFIX.length).trim();
-  }
-  return s;
-}
-
-export interface SymbolVariant {
-  /** The ticker with any "@sim"/"@real" suffix removed — what's actually
-   *  fetched and looked up. Case is preserved from the input. */
-  base: string;
-  /** True when the input explicitly asked to exclude simulated pre-inception
-   *  data (a trailing "@real"), overriding the default auto-extend behavior. */
-  forceReal: boolean;
-}
-
-/** Parses a symbol that may carry a trailing "@sim" or "@real" display/intent
- *  suffix into its real ticker and which variant was requested. */
-export function parseSymbolVariant(symbol: string): SymbolVariant {
-  const s = symbol.trim();
-  if (s.toUpperCase().endsWith(REAL_SUFFIX.toUpperCase())) {
-    return { base: stripRealSuffix(s), forceReal: true };
-  }
-  return { base: stripSimSuffix(s), forceReal: false };
-}
-
-/** Canonical storage/display key for the explicit real-only variant of a
- *  leveraged ETF, so it can coexist in a comparison group alongside the
- *  symbol's default (auto-simulated) entry. */
-export function realVariantSymbol(base: string): string {
-  return `${base.trim().toUpperCase()}${REAL_SUFFIX}`;
 }
 
 const SIM_SPECS: Record<string, LeverageSpec> = {

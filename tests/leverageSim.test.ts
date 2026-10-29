@@ -1,12 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  getLeverageSpec,
-  parseSymbolVariant,
-  realVariantSymbol,
-  simulatePrefix,
-  stripRealSuffix,
-  stripSimSuffix,
-} from "@/lib/leverageSim";
+import { getLeverageSpec, simulatePrefix, stripSimSuffix } from "@/lib/leverageSim";
 import { symbolLabel } from "@/lib/symbolCatalog";
 
 const spec = { underlying: "QQQ", leverage: 3, expenseRatio: 0, financingRate: 0 };
@@ -72,47 +65,3 @@ describe("stripSimSuffix", () => {
   });
 });
 
-describe("stripRealSuffix", () => {
-  it("strips a trailing @real suffix, case-insensitively", () => {
-    expect(stripRealSuffix("TQQQ@real")).toBe("TQQQ");
-    expect(stripRealSuffix("TQQQ@REAL")).toBe("TQQQ");
-    expect(stripRealSuffix(" tqqq@Real ")).toBe("tqqq");
-  });
-
-  it("leaves symbols without the suffix untouched", () => {
-    expect(stripRealSuffix("TQQQ")).toBe("TQQQ");
-    expect(stripRealSuffix("TQQQ@sim")).toBe("TQQQ@sim");
-  });
-});
-
-describe("parseSymbolVariant", () => {
-  it("detects an explicit @real request and strips it from the base", () => {
-    expect(parseSymbolVariant("TQQQ@real")).toEqual({ base: "TQQQ", forceReal: true });
-    expect(parseSymbolVariant("tqqq@REAL")).toEqual({ base: "tqqq", forceReal: true });
-  });
-
-  it("treats @sim and bare symbols as the default (non-forced) variant", () => {
-    expect(parseSymbolVariant("TQQQ@sim")).toEqual({ base: "TQQQ", forceReal: false });
-    expect(parseSymbolVariant("TQQQ")).toEqual({ base: "TQQQ", forceReal: false });
-  });
-});
-
-describe("realVariantSymbol", () => {
-  it("builds the canonical @real-tagged storage key", () => {
-    expect(realVariantSymbol("tqqq")).toBe("TQQQ@real");
-    expect(realVariantSymbol("00631L.TW")).toBe("00631L.TW@real");
-  });
-});
-
-describe("symbolLabel with an @real-tagged symbol", () => {
-  it("shows @real instead of @sim, regardless of the simulated flag", () => {
-    expect(symbolLabel("TQQQ@real", "zh", true).code).toBe("TQQQ@real");
-    expect(symbolLabel("TQQQ@real", "zh", false).code).toBe("TQQQ@real");
-  });
-
-  it("still resolves the Taiwan fund name under the @real tag", () => {
-    const { code, name } = symbolLabel("00631L.TW@real", "zh");
-    expect(code).toBe("00631L@real");
-    expect(name).toBeTruthy();
-  });
-});

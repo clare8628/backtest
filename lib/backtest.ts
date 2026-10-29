@@ -443,24 +443,13 @@ export function seriesYears(prices: PricePoint[]): number {
  * trimmed to this common window first. Returns null only when the group is
  * empty (nothing to align).
  */
-/**
- * @param excludeFromStart Symbols to leave out of the start-date computation —
- *   for a leveraged ETF's explicit real-only entry (symbol tagged "@real"),
- *   whose whole point is to sit next to its own auto-simulated sibling without
- *   dragging that sibling's start forward to its own later real inception.
- *   The entry is still trimmed to whatever window results from the rest of
- *   the group, and it still participates in the end-date computation.
- */
 export function commonWindow(
-  seriesList: SymbolSeries[],
-  excludeFromStart: Set<string> = new Set()
+  seriesList: SymbolSeries[]
 ): { start: string; end: string } | null {
   const withData = seriesList.filter((s) => s.prices.length > 0);
   if (withData.length === 0) return null;
-  const startCandidates = withData.filter((s) => !excludeFromStart.has(s.symbol));
-  const startSource = startCandidates.length > 0 ? startCandidates : withData;
-  let start = startSource[0].prices[0].date;
-  for (const s of startSource) {
+  let start = withData[0].prices[0].date;
+  for (const s of withData) {
     const first = s.prices[0].date;
     if (first > start) start = first;
   }

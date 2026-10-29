@@ -1,4 +1,4 @@
-import { parseSymbolVariant, REAL_SUFFIX, SIM_SUFFIX } from "./leverageSim";
+import { getLeverageSpec, SIM_SUFFIX, stripSimSuffix } from "./leverageSim";
 import { Currency } from "./types";
 
 export interface CatalogEntry {
@@ -357,11 +357,9 @@ export function registerDynamicSymbol(entry: CatalogEntry) {
 }
 
 export function findEntry(symbol: string): CatalogEntry | undefined {
-  // Accepts a symbol carrying an explicit "@real" (or stray "@sim") suffix,
-  // so every catalog-driven lookup (fees, asset class, fund size, ...) works
-  // the same for a leveraged ETF's real-only comparison entry as for its
-  // default one.
-  const key = parseSymbolVariant(symbol).base.trim().toUpperCase();
+  // Accepts a symbol carrying a stray "@sim" suffix, so every catalog-driven
+  // lookup (fees, asset class, fund size, ...) still works if one leaks in.
+  const key = stripSimSuffix(symbol).trim().toUpperCase();
   return (
     DYNAMIC_CATALOG.get(key) ||
     DYNAMIC_CATALOG.get(`${key}.TW`) ||
@@ -411,7 +409,7 @@ const TW_SUFFIX = /\.(TW|TWO)$/i;
 /** The market a symbol actually trades in, hence the currency its price and
  *  net assets are quoted in. */
 export function nativeCurrencyOf(symbol: string): Currency {
-  return TW_SUFFIX.test(parseSymbolVariant(symbol).base.trim()) ? "TWD" : "USD";
+  return TW_SUFFIX.test(stripSimSuffix(symbol).trim()) ? "TWD" : "USD";
 }
 
 /**
@@ -440,14 +438,8 @@ export function symbolLabel(
   lang: "zh" | "en" = "zh",
   simulated = false
 ): { code: string; name?: string } {
-  // A symbol may itself carry an explicit "@real" suffix (the un-simulated
-  // counterpart of a leveraged ETF, stored verbatim so it can coexist with
-  // the symbol's default entry) — strip it to resolve the actual ticker,
-  // then re-apply the right tag so Taiwan name lookup and formatting still
-  // work on the clean ticker underneath.
-  const { base, forceReal } = parseSymbolVariant(symbol);
-  const trimmed = base.trim();
-  const tag = forceReal ? REAL_SUFFIX : simulated ? SIM_SUFFIX : "";
+  const trimmed = stripSimSuffix(symbol).trim();
+  const tag = simulated ? SIM_SUFFIX : "";
   if (!TW_SUFFIX.test(trimmed)) return { code: trimmed + tag };
   const entry = findEntry(trimmed);
   if (!entry) return { code: trimmed + tag };
@@ -529,14 +521,32 @@ function matchRank(e: CatalogEntry, q: string): number {
   return -1; // no match
 }
 
+/**
+ * The suggestion list's entry for a leveraged ETF's simulated pre-inception
+ * extension, shown right under the fund's own entry — e.g. searching "T" lists
+ * TQQQ followed by "TQQQ@sim" so the feature is discoverable without already
+ * knowing it exists. Picking it adds the same underlying symbol: "@sim" is a
+ * display label, stripped by addSymbol/addSymbolToGroup before use.
+ */
+function simSuggestionFor(e: CatalogEntry): CatalogEntry {
+  return {
+    ...e,
+    symbol: `${e.symbol}${SIM_SUFFIX}`,
+    name: `${e.name}（模擬延伸至成立前）`,
+    nameEn: `${e.nameEn} (simulated, extended before inception)`,
+  };
+}
+
 export function searchCatalog(query: string): CatalogEntry[] {
   const q = query.trim().toLowerCase();
   const allEntries = [...Array.from(DYNAMIC_CATALOG.values()), ...SYMBOL_CATALOG];
-  if (!q) return allEntries.slice(0, 8);
-  return allEntries
-    .map((e) => ({ e, rank: matchRank(e, q) }))
-    .filter(({ rank }) => rank >= 0)
-    .sort((a, b) => a.rank - b.rank)
-    .slice(0, 8)
-    .map(({ e }) => e);
+  const matched = !q
+    ? allEntries.slice(0, 8)
+    : allEntries
+        .map((e) => ({ e, rank: matchRank(e, q) }))
+        .filter(({ rank }) => rank >= 0)
+        .sort((a, b) => a.rank - b.rank)
+        .slice(0, 8)
+        .map(({ e }) => e);
+  return matched.flatMap((e) => (getLeverageSpec(e.symbol) ? [e, simSuggestionFor(e)] : [e]));
 }
