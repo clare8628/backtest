@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { ChartSeries, Currency } from "@/lib/types";
 import { Lang, t } from "@/lib/i18n";
 import { symbolLabel } from "@/lib/symbolCatalog";
-import { isSimulatedSymbol, stripSimSuffix } from "@/lib/leverageSim";
+import { isSimulatedSymbol, parseAllocation, variantSymbol } from "@/lib/leverageSim";
 import { simulateWithdrawnSeries } from "@/lib/backtest";
 
 // 現代金融精緻高對比調色盤（兼顧高辨識度、色盲友善與 Equals 品牌質感）
@@ -361,7 +361,8 @@ export default function PerformanceChart({
       }
     });
 
-    // 若同一檔標的同時存在真實與模擬版本，避免在相同分割日期重複標記
+    // 若同一檔標的（含相同配置比例）同時存在真實與模擬版本，避免在相同分割
+    // 日期重複標記；不同配置比例（@alo）視為獨立比較標的，各自保留標記。
     const seen = new Set<string>();
     const deduped: VisibleSplit[] = [];
     const sorted = [...list].sort((a, b) => {
@@ -370,7 +371,7 @@ export default function PerformanceChart({
       return aSim - bSim;
     });
     for (const item of sorted) {
-      const key = `${stripSimSuffix(item.symbol).toUpperCase()}-${item.date}`;
+      const key = `${variantSymbol(item.symbol, { alloc: parseAllocation(item.symbol) })}-${item.date}`;
       if (!seen.has(key)) {
         seen.add(key);
         deduped.push(item);
@@ -413,7 +414,7 @@ export default function PerformanceChart({
     const seen = new Set<string>();
     const deduped: DepletionEvent[] = [];
     for (const item of list) {
-      const key = `${stripSimSuffix(item.symbol).toUpperCase()}-${item.depletedDate}`;
+      const key = `${variantSymbol(item.symbol, { alloc: parseAllocation(item.symbol) })}-${item.depletedDate}`;
       if (!seen.has(key)) {
         seen.add(key);
         deduped.push(item);
