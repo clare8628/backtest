@@ -1295,6 +1295,33 @@ describe("simulateWithdrawnSeries and depletion event detection", () => {
   });
 });
 
+describe("QUAL ETF and BRK.B fund size [BAC-23]", () => {
+  it("includes QUAL in the symbol catalog with correct metadata", () => {
+    const qual = findEntry("QUAL");
+    expect(qual).toBeDefined();
+    expect(qual?.symbol).toBe("QUAL");
+    expect(qual?.name).toContain("品質因子");
+    expect(qual?.nameEn).toBe("iShares MSCI USA Quality Factor ETF");
+    expect(qual?.category).toBe("ETF");
+    expect(qual?.expenseRatio).toBe(0.15);
+    expect(qual?.fundSizeSnapshot).toBe(47900000000);
+    expect(hasKnownManagementFee("QUAL")).toBe(true);
+    expect(getManagementFee("QUAL")).toBe(0.15);
+  });
+
+  it("can find QUAL in searchCatalog", () => {
+    const results = searchCatalog("QUAL");
+    expect(results.some((r) => r.symbol === "QUAL")).toBe(true);
+  });
+
+  it("provides fundSizeSnapshot for BRK.B as a market cap snapshot", () => {
+    expect(getFundSize("BRK.B")).toBe(1080000000000);
+    const inUsd = fundSizeIn("BRK.B", "USD", 30);
+    expect(inUsd).toEqual({ value: 1080000000000, currency: "USD" });
+  });
+});
+
+
 
 
 

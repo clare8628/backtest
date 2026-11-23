@@ -144,3 +144,15 @@
   - 同步調整表頭基金中文名稱為 `text-xs`（12.5px）、Beta 對照標的說明為 `text-xs opacity-65`、提領耗盡年份與備註為 `text-xs` / `text-[11px]`，分組標題調為 `12px`，表格行間距調整為 `py-2` 確保舒適閱讀與金融數據清爽感。
 - 測試 110/110 全數通過、TypeScript 檢查通過、Next.js 16 Production Build 編譯通過。
 
+更新 (2026-11-23) [BAC-23]：
+- 加入標的 ETF QUAL：
+  - 於標的目錄（SYMBOL_CATALOG）中加入美股旗艦因子 ETF `QUAL`（iShares MSCI美國品質因子 ETF / iShares MSCI USA Quality Factor ETF）。
+  - 設定分類為 `ETF`、費用率（expenseRatio）為 `0.15%`、資產規模快照（fundSizeSnapshot）為 `$47.9B`（`47900000000`）。
+- 補充 BRK.B 資產規模數據：
+  - 於標的目錄中為波克夏海瑟威（`BRK.B`）補充資產規模數據 `fundSizeSnapshot: 1080000000000`（總市值約 1.08 兆美元）。
+  - 解決回測比較組中 BRK.B 規模數據為空白（破折號「—」）之問題，在資產矩陣中正確顯示 `$1080.0B`。
+- 單元測試與型別檢查：
+  - 於 `tests/backtest.test.ts` 新增針對 QUAL 及 BRK.B 資產規模快照之完整單元測試。
+  - 153/153 項測試全數通過、TypeScript 型別檢查通過。
+
+

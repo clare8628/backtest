@@ -61,10 +61,11 @@ export type FundSizeUnavailableReason = "delisting" | "noData";
  *
  * Covers every fund in the catalog, equity ETFs included — a fund-size column
  * that only fills in for bond ETFs answers the question for none of the
- * comparisons people actually run. Individual stocks carry no figure by
- * definition, and 00790B is absent from the source's net-assets data
- * entirely (it was delisted for falling below the NT$100m minimum and is
- * being liquidated); it shows a dash rather than a guess.
+ * comparisons people actually run. Most individual stocks carry no figure by
+ * definition (though Berkshire Hathaway BRK.B carries its market capitalization
+ * snapshot so comparisons against funds can scale it), and 00790B is absent
+ * from the source's net-assets data entirely (it was delisted for falling below
+ * the NT$100m minimum and is being liquidated); it shows a dash rather than a guess.
  *
  * Re-fetched on 2026-10-11 to backfill every fund the catalog had grown to
  * include since the original 2026-08-31 pass (new US/TW dividend, gold and
@@ -85,6 +86,7 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "QQQ", name: "Invesco 那斯達克100 ETF", nameEn: "Invesco QQQ Trust", category: "ETF", expenseRatio: 0.20, fundSizeSnapshot: 452800643072 },
   { symbol: "QQQI", name: "NEOS 那斯達克100高股息 ETF", nameEn: "NEOS Nasdaq 100 High Income ETF", category: "ETF", expenseRatio: 0.68, fundSizeSnapshot: 15390000000 },
   { symbol: "SPMO", name: "Invesco 標普500動能 ETF", nameEn: "Invesco S&P 500 Momentum ETF", category: "ETF", expenseRatio: 0.13, fundSizeSnapshot: 23250000000 },
+  { symbol: "QUAL", name: "iShares MSCI美國品質因子 ETF", nameEn: "iShares MSCI USA Quality Factor ETF", category: "ETF", expenseRatio: 0.15, fundSizeSnapshot: 47900000000 },
   { symbol: "TQQQ", name: "Invesco 那斯達克100 正3倍槓桿 ETF", nameEn: "Invesco QQQ Trust 3x Shares", category: "ETF", expenseRatio: 1.08, fundSizeSnapshot: 32831182848 },
   { symbol: "QLD", name: "ProShares 那斯達克100 正2倍槓桿 ETF", nameEn: "ProShares Ultra QQQ", category: "ETF", expenseRatio: 0.95, fundSizeSnapshot: 12760278016 },
   { symbol: "UPRO", name: "ProShares 標普500 正3倍槓桿 ETF", nameEn: "ProShares Ultra Pro S&P 500 ETF", category: "ETF", expenseRatio: 1.01, fundSizeSnapshot: 5150206464 },
@@ -323,7 +325,7 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "NVDA", name: "輝達", nameEn: "NVIDIA Corp.", category: "Stock", expenseRatio: 0 },
   { symbol: "TSLA", name: "特斯拉", nameEn: "Tesla Inc.", category: "Stock", expenseRatio: 0 },
   { symbol: "META", name: "Meta Platforms", nameEn: "Meta Platforms Inc.", category: "Stock", expenseRatio: 0 },
-  { symbol: "BRK.B", name: "波克夏海瑟威", nameEn: "Berkshire Hathaway Inc.", category: "Stock", expenseRatio: 0 },
+  { symbol: "BRK.B", name: "波克夏海瑟威", nameEn: "Berkshire Hathaway Inc.", category: "Stock", expenseRatio: 0, fundSizeSnapshot: 1080000000000 },
   { symbol: "TSM", name: "台積電（ADR）", nameEn: "Taiwan Semiconductor (ADR)", category: "Stock", expenseRatio: 0 },
   { symbol: "JPM", name: "摩根大通", nameEn: "JPMorgan Chase & Co.", category: "Stock", expenseRatio: 0 },
   // --- High-moat stocks: dominant, hard-to-displace franchises across
