@@ -357,7 +357,12 @@ async function fetchFromYahoo(
  */
 export function isTaiwanListed(symbol: string): boolean {
   const s = stripSimSuffix(symbol).trim().toUpperCase();
-  return s.endsWith(".TW") || s.endsWith(".TWO");
+  if (s.endsWith(".TW") || s.endsWith(".TWO")) return true;
+  const entry = findEntry(s);
+  if (entry && (entry.symbol.toUpperCase().endsWith(".TW") || entry.symbol.toUpperCase().endsWith(".TWO"))) {
+    return true;
+  }
+  return /^\d{4,6}[A-Z]?$/i.test(s);
 }
 
 /**

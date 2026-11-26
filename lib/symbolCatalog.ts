@@ -250,6 +250,7 @@ export const SYMBOL_CATALOG: CatalogEntry[] = [
   { symbol: "00862B.TWO", name: "中信投資級公司債", nameEn: "CTBC US 20+ Year BBB Corporate Bond ETF", category: "Bond ETF", expenseRatio: 0.28, assetClass: "投資級公司債", creditRating: "BBB 級", fundSizeSnapshot: 27162494976 },
   { symbol: "00760B.TWO", name: "復華新興企業債", nameEn: "Fuh Hwa Emerging Market Credit Bond ETF", category: "Bond ETF", expenseRatio: 0.32, assetClass: "新興市場債", fundSizeSnapshot: 23217561600 },
   { symbol: "00789B.TWO", name: "復華公司債A3", nameEn: "Fuh Hwa 20+ Year A3 or Better Corporate Bond ETF", category: "Bond ETF", expenseRatio: 0.26, assetClass: "投資級公司債", creditRating: "A3（≈A-）以上", fundSizeSnapshot: 21244661760 },
+  { symbol: "00865B.TW", name: "國泰US短期公債", nameEn: "Cathay Bloomberg US Short Treasury ETF", category: "Bond ETF", expenseRatio: 0.14, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 17306000000 },
   { symbol: "00696B.TWO", name: "富邦美債20年", nameEn: "Fubon 20 +Years US Treasury Bond ETF", category: "Bond ETF", expenseRatio: 0.18, assetClass: "美國公債", creditRating: "AA+（美國主權）", fundSizeSnapshot: 17236840448 },
   { symbol: "00836B.TWO", name: "永豐10年A公司債", nameEn: "Sinopac ICE 10+ Year Core Large Cap Single-A US Corporate Bond ETF", category: "Bond ETF", expenseRatio: 0.28, assetClass: "投資級公司債", creditRating: "A 級", fundSizeSnapshot: 17227079680 },
   { symbol: "00867B.TWO", name: "台新A-BBB電信債", nameEn: "Taishin Premium Umbrella Fund - Taishin ICE 15+ Year US Telecommunications Index ETF", category: "Bond ETF", expenseRatio: 0.28, assetClass: "電信公司債", creditRating: "A- 以上", fundSizeSnapshot: 17032177664 },
@@ -421,7 +422,12 @@ const TW_SUFFIX = /\.(TW|TWO)$/i;
 /** The market a symbol actually trades in, hence the currency its price and
  *  net assets are quoted in. */
 export function nativeCurrencyOf(symbol: string): Currency {
-  return TW_SUFFIX.test(stripSimSuffix(symbol).trim()) ? "TWD" : "USD";
+  const stripped = stripSimSuffix(symbol).trim();
+  if (TW_SUFFIX.test(stripped)) return "TWD";
+  const entry = findEntry(stripped);
+  if (entry && TW_SUFFIX.test(entry.symbol)) return "TWD";
+  if (/^\d{4,6}[A-Z]?$/i.test(stripped)) return "TWD";
+  return "USD";
 }
 
 /**
@@ -455,11 +461,15 @@ export function symbolLabel(
   const alloc = parseAllocation(symbol);
   const tag =
     (simulated || hasSimSuffix ? SIM_SUFFIX : "") + (alloc ? allocationSuffix(alloc) : "");
-  if (!TW_SUFFIX.test(trimmed)) return { code: trimmed + tag };
   const entry = findEntry(trimmed);
+  const isTw =
+    TW_SUFFIX.test(trimmed) ||
+    (entry && TW_SUFFIX.test(entry.symbol)) ||
+    /^\d{4,6}[A-Z]?$/i.test(trimmed);
+  if (!isTw) return { code: trimmed + tag };
   if (!entry) return { code: trimmed + tag };
   return {
-    code: trimmed.replace(TW_SUFFIX, "") + tag,
+    code: (entry.symbol.replace(TW_SUFFIX, "") || trimmed.replace(TW_SUFFIX, "")) + tag,
     name: lang === "en" ? entry.nameEn : entry.name,
   };
 }

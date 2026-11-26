@@ -1321,6 +1321,81 @@ describe("QUAL ETF and BRK.B fund size [BAC-23]", () => {
   });
 });
 
+describe("00865B and 00719B indicators and bare symbol handling [BAC-25]", () => {
+  it("includes 00865B in the symbol catalog with complete indicator metadata", () => {
+    const entry = findEntry("00865B.TW");
+    expect(entry).toBeDefined();
+    expect(entry?.symbol).toBe("00865B.TW");
+    expect(entry?.name).toBe("國泰US短期公債");
+    expect(entry?.nameEn).toBe("Cathay Bloomberg US Short Treasury ETF");
+    expect(entry?.category).toBe("Bond ETF");
+    expect(entry?.expenseRatio).toBe(0.14);
+    expect(entry?.assetClass).toBe("美國公債");
+    expect(entry?.creditRating).toBe("AA+（美國主權）");
+    expect(entry?.fundSizeSnapshot).toBe(17306000000);
+    expect(hasKnownManagementFee("00865B.TW")).toBe(true);
+    expect(getManagementFee("00865B.TW")).toBe(0.14);
+  });
+
+  it("resolves 00865B and 00719B via bare ticker without suffix", () => {
+    const b865 = findEntry("00865B");
+    expect(b865).toBeDefined();
+    expect(b865?.symbol).toBe("00865B.TW");
+    expect(b865?.name).toBe("國泰US短期公債");
+    expect(getManagementFee("00865B")).toBe(0.14);
+    expect(getAssetClass("00865B")).toBe("美國公債");
+    expect(getCreditRating("00865B")).toBe("AA+（美國主權）");
+    expect(getFundSize("00865B")).toBe(17306000000);
+
+    const b719 = findEntry("00719B");
+    expect(b719).toBeDefined();
+    expect(b719?.symbol).toBe("00719B.TWO");
+    expect(b719?.name).toBe("元大美債1-3");
+    expect(getManagementFee("00719B")).toBe(0.18);
+    expect(getAssetClass("00719B")).toBe("美國公債");
+    expect(getCreditRating("00719B")).toBe("AA+（美國主權）");
+    expect(getFundSize("00719B")).toBe(9714907136);
+  });
+
+  it("recognizes bare 00865B and 00719B as Taiwan-listed and TWD native currency", () => {
+    expect(isTaiwanListed("00865B")).toBe(true);
+    expect(isTaiwanListed("00865B.TW")).toBe(true);
+    expect(isTaiwanListed("00719B")).toBe(true);
+    expect(isTaiwanListed("00719B.TWO")).toBe(true);
+
+    expect(nativeCurrencyOf("00865B")).toBe("TWD");
+    expect(nativeCurrencyOf("00865B.TW")).toBe("TWD");
+    expect(nativeCurrencyOf("00719B")).toBe("TWD");
+    expect(nativeCurrencyOf("00719B.TWO")).toBe("TWD");
+  });
+
+  it("formats displaySymbol with fund name for bare and suffixed symbols", () => {
+    expect(displaySymbol("00865B")).toBe("00865B(國泰US短期公債)");
+    expect(displaySymbol("00865B.TW")).toBe("00865B(國泰US短期公債)");
+    expect(displaySymbol("00719B")).toBe("00719B(元大美債1-3)");
+    expect(displaySymbol("00719B.TWO")).toBe("00719B(元大美債1-3)");
+  });
+
+  it("converts fund size accurately for mixed market comparisons", () => {
+    const rate = 32;
+    const b865Usd = fundSizeIn("00865B", "USD", rate);
+    expect(b865Usd.currency).toBe("USD");
+    expect(b865Usd.value).toBe(Math.round(17306000000 / rate));
+
+    const b719Usd = fundSizeIn("00719B", "USD", rate);
+    expect(b719Usd.currency).toBe("USD");
+    expect(b719Usd.value).toBe(Math.round(9714907136 / rate));
+  });
+
+  it("surfaces 00865B in searchCatalog by ticker and Chinese name", () => {
+    const byTicker = searchCatalog("00865B");
+    expect(byTicker.some((r) => r.symbol === "00865B.TW")).toBe(true);
+
+    const byName = searchCatalog("短期公債");
+    expect(byName.some((r) => r.symbol === "00865B.TW")).toBe(true);
+  });
+});
+
 
 
 
